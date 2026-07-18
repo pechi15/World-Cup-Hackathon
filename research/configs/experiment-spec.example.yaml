@@ -1,0 +1,48 @@
+schema_version: EXPERIMENT_RUN_CONFIG/1
+experiment_id: COLAB-SYNTHETIC-REPRO-001
+created_at: "2026-01-01T00:00:00Z"
+data_mode: SYNTHETIC_TEST
+dataset:
+  source_type: DETERMINISTIC_GENERATOR
+  source_uri: "repository://quant_research.synthetic/_synthetic_observations"
+  generator:
+    name: DETERMINISTIC_CALIBRATED_BINARY
+    count: 200
+  expected_hash: null
+feature_manifest_path: research/configs/feature-manifest.example.json
+model_config_path: research/configs/model-config.example.yaml
+backtest_config_path: research/configs/backtest-config.example.yaml
+hypothesis:
+  hypothesis_id: SYNTHETIC_CALIBRATION
+  statement: A deterministic synthetic probability process should recover calibrated fixture-safe scores.
+  mechanism: Outcomes use fixed frequencies at five probability levels with no random or notebook-local metrics.
+  falsification_criteria:
+    - Walk-forward expected calibration error exceeds 0.08.
+    - Any fixture appears in both training and test data.
+  academic_references:
+    - brier1950verification
+    - gneiting2007proper
+  primary_metric: brier_score
+  benchmark_id: SHRUNK_SYNTHETIC_BASELINE
+split:
+  folds: 3
+  min_train_fixtures: 30
+  min_test_fixtures: 20
+  purge_seconds: 60
+  embargo_seconds: 60
+  fixture_grouped: true
+  chronological: true
+holdout:
+  fraction: 0.2
+  salt_id: colab-synthetic-v1
+  minimum_fixtures: 20
+  one_time_evaluation: true
+random_seed: 7
+primary_metrics:
+  - brier_score
+  - expected_calibration_error
+max_trials: 2
+implementation_claim: Synthetic pipeline validation only; no alpha, profitability, paper, or live-readiness claim.
+training_cutoff: "2026-01-20T00:00:00Z"
+expected_branch: cursor/quant-agents
+expected_commit: null

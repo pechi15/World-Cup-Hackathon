@@ -152,7 +152,7 @@ class DeterministicPromotionGate:
             "ALL_EVIDENCE_BOUND": not binding_failures,
             "FEATURE_MANIFEST_VERIFIED": feature_manifest_hash(spec.features)
             == spec.feature_manifest_hash,
-            "NON_SYNTHETIC_EVIDENCE": spec.data_mode != DataMode.SYNTHETIC,
+            "NON_SYNTHETIC_EVIDENCE": spec.data_mode != DataMode.SYNTHETIC_TEST,
             "FINAL_CRITIC_APPROVED": final_review.approved,
             "NO_LEAKAGE": not validation.leakage_detected,
             "NO_FIXTURE_OVERLAP": not validation.fixture_overlap_detected,
@@ -213,8 +213,8 @@ class DeterministicPromotionGate:
         if failed:
             target = PromotionTarget.REJECTED
         elif (
-            spec.data_mode == DataMode.TXODDS
-            and artifact.data_mode != DataMode.SYNTHETIC
+            spec.data_mode == DataMode.REAL_HISTORICAL
+            and artifact.data_mode == DataMode.REAL_HISTORICAL
             and holdout_evaluation is not None
             and holdout_evaluation.calibration.sample_size
             >= self._config.minimum_holdout_observations_for_paper
@@ -228,7 +228,11 @@ class DeterministicPromotionGate:
         reason_codes = tuple(
             [f"PASS:{name}" for name in passed]
             + [f"FAIL:{name}" for name in failed]
-            + (["SYNTHETIC_PIPELINE_VALIDATION_ONLY", "NO_ALPHA_CLAIM"] if spec.data_mode == DataMode.SYNTHETIC else [])
+            + (
+                ["SYNTHETIC_PIPELINE_VALIDATION_ONLY", "NO_ALPHA_CLAIM"]
+                if spec.data_mode == DataMode.SYNTHETIC_TEST
+                else []
+            )
         )
         decision_body = _stable_evidence({
             "experiment_id": spec.experiment_id,

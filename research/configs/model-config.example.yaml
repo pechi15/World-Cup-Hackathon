@@ -1,0 +1,7 @@
+schema_version: MODEL_CONFIG/1
+model_family: SYNTHETIC_FREQUENCY_MODEL
+parameters:
+  - name: kelly_fraction
+    value: 0.10
+agent_model_identifier: deterministic-offline-researcher-critic/1
+prompt_version: OFFLINE_RESEARCH_PROMPT/1

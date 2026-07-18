@@ -17,9 +17,12 @@ class Contract(BaseModel):
 
 
 class DataMode(StrEnum):
-    SYNTHETIC = "SYNTHETIC"
-    REPLAY = "REPLAY"
-    TXODDS = "TXODDS"
+    SYNTHETIC_TEST = "SYNTHETIC_TEST"
+    SANITIZED_TXODDS = "SANITIZED_TXODDS"
+    REAL_HISTORICAL = "REAL_HISTORICAL"
+    SYNTHETIC = "SYNTHETIC_TEST"
+    REPLAY = "SANITIZED_TXODDS"
+    TXODDS = "REAL_HISTORICAL"
 
 
 class ResearchState(StrEnum):
@@ -59,6 +62,12 @@ class ArtifactRole(StrEnum):
     CHAMPION = "CHAMPION"
     CHALLENGER = "CHALLENGER"
     ARCHIVED = "ARCHIVED"
+
+
+class DatasetSourceType(StrEnum):
+    DETERMINISTIC_GENERATOR = "DETERMINISTIC_GENERATOR"
+    JSON_OBSERVATIONS = "JSON_OBSERVATIONS"
+    TXODDS_REPLAY = "TXODDS_REPLAY"
 
 
 class EvidenceBinding(Contract):
@@ -110,6 +119,89 @@ class FeatureDefinition(Contract):
     lookback_seconds: int = Field(ge=0)
     known_at_field: str
     nullable: bool = False
+
+
+class FeatureManifest(Contract):
+    schema_version: str = Field(min_length=1)
+    manifest_id: str = Field(min_length=1)
+    features: tuple[FeatureDefinition, ...] = Field(min_length=1)
+    manifest_hash: str = Field(pattern="^[0-9a-f]{64}$")
+
+
+class DatasetGeneratorSpec(Contract):
+    name: str = Field(pattern="^DETERMINISTIC_CALIBRATED_BINARY$")
+    count: int = Field(ge=40, le=100_000)
+
+
+class DatasetManifest(Contract):
+    schema_version: str = Field(min_length=1)
+    dataset_id: str = Field(min_length=1)
+    data_mode: DataMode
+    source_type: DatasetSourceType
+    source_uri: str = Field(min_length=1)
+    content_hash: str = Field(pattern="^[0-9a-f]{64}$")
+    record_count: int = Field(ge=0)
+    fixture_count: int = Field(ge=0)
+    contains_settled_outcomes: bool
+    sanitized: bool
+    generator: DatasetGeneratorSpec | None = None
+
+    @model_validator(mode="after")
+    def coherent_source(self) -> DatasetManifest:
+        if self.source_type == DatasetSourceType.DETERMINISTIC_GENERATOR and self.generator is None:
+            raise ValueError("deterministic datasets require generator configuration")
+        if self.data_mode == DataMode.REAL_HISTORICAL and self.sanitized:
+            raise ValueError("REAL_HISTORICAL cannot be labeled sanitized")
+        return self
+
+
+class DatasetInputConfig(Contract):
+    source_type: DatasetSourceType
+    source_uri: str
+    generator: DatasetGeneratorSpec | None = None
+    expected_hash: str | None = Field(default=None, pattern="^[0-9a-f]{64}$")
+
+
+class ModelConfig(Contract):
+    schema_version: str
+    model_family: str
+    parameters: tuple[ModelParameter, ...]
+    agent_model_identifier: str
+    prompt_version: str
+
+
+class BacktestConfig(Contract):
+    schema_version: str
+    latency: LatencyAssumptions
+    fills: FillAssumptions
+    stress_scenarios: tuple[StressScenario, ...] = Field(min_length=1)
+
+
+class ExperimentRunConfig(Contract):
+    schema_version: str
+    experiment_id: str
+    created_at: datetime
+    data_mode: DataMode = DataMode.SYNTHETIC_TEST
+    dataset: DatasetInputConfig
+    feature_manifest_path: str
+    model_config_path: str
+    backtest_config_path: str
+    hypothesis: Hypothesis
+    split: PurgedSplitSpec
+    holdout: HoldoutSpec
+    random_seed: int = Field(ge=0)
+    primary_metrics: tuple[str, ...] = Field(min_length=1)
+    max_trials: int = Field(ge=1, le=100)
+    implementation_claim: str
+    training_cutoff: datetime
+    expected_branch: str
+    expected_commit: str | None = Field(default=None, pattern="^[0-9a-f]{40}$")
+
+    @model_validator(mode="after")
+    def aware_timestamps(self) -> ExperimentRunConfig:
+        if self.created_at.tzinfo is None or self.training_cutoff.tzinfo is None:
+            raise ValueError("experiment timestamps must be timezone-aware")
+        return self
 
 
 class MetricResult(Contract):
@@ -559,6 +651,84 @@ class RegistryEvent(Contract):
     payload: dict[str, Any]
     previous_hash: str
     event_hash: str
+
+
+class PackageVersion(Contract):
+    name: str
+    version: str
+
+
+class ValidationWindow(Contract):
+    fold_id: int = Field(ge=0)
+    training_cutoff: datetime
+    test_start: datetime
+    test_fixture_ids: tuple[str, ...]
+
+
+class ArtifactChecksum(Contract):
+    path: str
+    sha256: str = Field(pattern="^[0-9a-f]{64}$")
+    size_bytes: int = Field(ge=0)
+
+
+class RunMetadata(Contract):
+    schema_version: str = Field(min_length=1)
+    git_commit: str = Field(pattern="^[0-9a-f]{40}$")
+    branch: str = Field(min_length=1)
+    dataset_hash: str = Field(pattern="^[0-9a-f]{64}$")
+    feature_manifest_hash: str = Field(pattern="^[0-9a-f]{64}$")
+    experiment_id: str = Field(min_length=1)
+    random_seed: int = Field(ge=0)
+    training_cutoff: datetime
+    validation_windows: tuple[ValidationWindow, ...]
+    package_versions: tuple[PackageVersion, ...]
+    agent_model_identifier: str = Field(min_length=1)
+    prompt_version: str = Field(min_length=1)
+    run_timestamp: datetime
+    artifact_checksums: tuple[ArtifactChecksum, ...]
+
+    @model_validator(mode="after")
+    def timestamps_are_aware(self) -> RunMetadata:
+        values: tuple[datetime, ...] = (self.training_cutoff, self.run_timestamp)
+        values += tuple(window.training_cutoff for window in self.validation_windows)
+        values += tuple(window.test_start for window in self.validation_windows)
+        if any(value.tzinfo is None for value in values):
+            raise ValueError("run provenance timestamps must be timezone-aware")
+        return self
+
+
+class ContextClaim(Contract):
+    claim: str = Field(min_length=1)
+    publication_time: datetime
+    retrieval_time: datetime
+    source: str = Field(min_length=1)
+    citation: str = Field(min_length=1)
+    valid_at_decision_time: bool
+
+    @model_validator(mode="after")
+    def valid_times(self) -> ContextClaim:
+        if self.publication_time.tzinfo is None or self.retrieval_time.tzinfo is None:
+            raise ValueError("context claim timestamps must be timezone-aware")
+        if self.publication_time > self.retrieval_time:
+            raise ValueError("publication_time cannot follow retrieval_time")
+        return self
+
+
+class ArtifactMetadata(Contract):
+    schema_version: str = Field(min_length=1)
+    experiment_id: str
+    data_mode: DataMode
+    model_family: str
+    model_artifact: ArtifactChecksum
+    generated_files: tuple[ArtifactChecksum, ...]
+    promotion_target: PromotionTarget
+    production_integrated: bool = False
+
+    @model_validator(mode="after")
+    def research_only(self) -> ArtifactMetadata:
+        if self.production_integrated:
+            raise ValueError("Colab artifacts cannot declare production integration")
+        return self
 
 
 def utc_now() -> datetime:

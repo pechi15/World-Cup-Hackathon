@@ -1,0 +1,17 @@
+{
+  "schema_version": "FEATURE_MANIFEST/1",
+  "manifest_id": "synthetic-calibrated-binary-v1",
+  "features": [
+    {
+      "name": "synthetic_probability",
+      "dtype": "float64",
+      "description": "Known deterministic probability available before the decision.",
+      "source": "quant_research.synthetic._synthetic_observations",
+      "availability": "RECEIVE_TIME",
+      "lookback_seconds": 0,
+      "known_at_field": "available_at",
+      "nullable": false
+    }
+  ],
+  "manifest_hash": "3c6e6a24eee51cb99ba1947ecf06e9308de1669ae750365837a668c95b3dffed"
+}

@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "FeatureAvailability": {
+      "enum": [
+        "EVENT_TIME",
+        "RECEIVE_TIME",
+        "STATIC_PRE_FIXTURE"
+      ],
+      "title": "FeatureAvailability",
+      "type": "string"
+    },
+    "FeatureDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "availability": {
+          "$ref": "#/$defs/FeatureAvailability"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "dtype": {
+          "title": "Dtype",
+          "type": "string"
+        },
+        "known_at_field": {
+          "title": "Known At Field",
+          "type": "string"
+        },
+        "lookback_seconds": {
+          "minimum": 0,
+          "title": "Lookback Seconds",
+          "type": "integer"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "nullable": {
+          "default": false,
+          "title": "Nullable",
+          "type": "boolean"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "dtype",
+        "description",
+        "source",
+        "availability",
+        "lookback_seconds",
+        "known_at_field"
+      ],
+      "title": "FeatureDefinition",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "features": {
+      "items": {
+        "$ref": "#/$defs/FeatureDefinition"
+      },
+      "minItems": 1,
+      "title": "Features",
+      "type": "array"
+    },
+    "manifest_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Manifest Hash",
+      "type": "string"
+    },
+    "manifest_id": {
+      "minLength": 1,
+      "title": "Manifest Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "minLength": 1,
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "features",
+    "manifest_hash"
+  ],
+  "title": "FeatureManifest",
+  "type": "object"
+}

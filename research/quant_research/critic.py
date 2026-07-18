@@ -11,6 +11,7 @@ from .contracts import (
     CheckStatus,
     CriticFinding,
     CriticReview,
+    DataMode,
     ExperimentSpec,
     PredictionObservation,
     StressResult,
@@ -277,7 +278,7 @@ class IndependentCriticAgent:
                 bool(spec.hypothesis.academic_references)
                 and not prohibited_claim
                 and "synthetic" in spec.implementation_claim.lower()
-                if spec.data_mode.value == "SYNTHETIC"
+                if spec.data_mode == DataMode.SYNTHETIC_TEST
                 else bool(spec.hypothesis.academic_references) and not prohibited_claim,
                 (
                     f"references={len(spec.hypothesis.academic_references)}; "

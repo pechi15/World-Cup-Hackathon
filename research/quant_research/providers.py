@@ -76,14 +76,24 @@ class PerplexityAgentProvider:
         api_key: str | None = None,
         model: str | None = None,
         timeout_seconds: float = 60.0,
+        enable_context: bool | None = None,
     ) -> None:
         self._api_key = api_key if api_key is not None else os.getenv("PERPLEXITY_API_KEY")
-        self._model = model or os.getenv("PERPLEXITY_MODEL", "openai/gpt-5.6-sol")
+        self._model: str = model or os.getenv("PERPLEXITY_MODEL") or "openai/gpt-5.6-sol"
         self._timeout_seconds = timeout_seconds
+        self._enable_context = (
+            enable_context
+            if enable_context is not None
+            else os.getenv("ENABLE_PERPLEXITY_CONTEXT", "").lower() == "true"
+        )
 
     @property
     def enabled(self) -> bool:
-        return bool(self._api_key)
+        return self._enable_context and bool(self._api_key)
+
+    @property
+    def model_identifier(self) -> str:
+        return self._model if self.enabled else "DISABLED"
 
     def generate(
         self,
@@ -94,7 +104,7 @@ class PerplexityAgentProvider:
         schema_name: str,
     ) -> ResponseT:
         if not self.enabled:
-            raise ProviderDisabled("PERPLEXITY_API_KEY is not set")
+            raise ProviderDisabled("Perplexity context is not configured")
         safe_name = re.sub(r"[^A-Za-z0-9]", "", schema_name)[:64]
         if not safe_name:
             raise ValueError("schema_name must contain an alphanumeric character")

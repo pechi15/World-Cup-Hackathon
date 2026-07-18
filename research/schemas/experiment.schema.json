@@ -1,0 +1,446 @@
+{
+  "$defs": {
+    "DataMode": {
+      "enum": [
+        "SYNTHETIC_TEST",
+        "SANITIZED_TXODDS",
+        "REAL_HISTORICAL",
+        "SYNTHETIC_TEST",
+        "SANITIZED_TXODDS",
+        "REAL_HISTORICAL"
+      ],
+      "title": "DataMode",
+      "type": "string"
+    },
+    "FeatureAvailability": {
+      "enum": [
+        "EVENT_TIME",
+        "RECEIVE_TIME",
+        "STATIC_PRE_FIXTURE"
+      ],
+      "title": "FeatureAvailability",
+      "type": "string"
+    },
+    "FeatureDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "availability": {
+          "$ref": "#/$defs/FeatureAvailability"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "dtype": {
+          "title": "Dtype",
+          "type": "string"
+        },
+        "known_at_field": {
+          "title": "Known At Field",
+          "type": "string"
+        },
+        "lookback_seconds": {
+          "minimum": 0,
+          "title": "Lookback Seconds",
+          "type": "integer"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "nullable": {
+          "default": false,
+          "title": "Nullable",
+          "type": "boolean"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "dtype",
+        "description",
+        "source",
+        "availability",
+        "lookback_seconds",
+        "known_at_field"
+      ],
+      "title": "FeatureDefinition",
+      "type": "object"
+    },
+    "FillAssumptions": {
+      "additionalProperties": false,
+      "properties": {
+        "fee_bps": {
+          "minimum": 0.0,
+          "title": "Fee Bps",
+          "type": "number"
+        },
+        "mode": {
+          "pattern": "^(TOUCH|CROSS|QUEUE_AWARE)$",
+          "title": "Mode",
+          "type": "string"
+        },
+        "partial_fills": {
+          "title": "Partial Fills",
+          "type": "boolean"
+        },
+        "queue_fraction": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Queue Fraction",
+          "type": "number"
+        },
+        "slippage_bps": {
+          "minimum": 0.0,
+          "title": "Slippage Bps",
+          "type": "number"
+        }
+      },
+      "required": [
+        "mode",
+        "queue_fraction",
+        "slippage_bps",
+        "fee_bps",
+        "partial_fills"
+      ],
+      "title": "FillAssumptions",
+      "type": "object"
+    },
+    "HoldoutSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "fraction": {
+          "exclusiveMaximum": 0.5,
+          "exclusiveMinimum": 0.0,
+          "title": "Fraction",
+          "type": "number"
+        },
+        "minimum_fixtures": {
+          "minimum": 1,
+          "title": "Minimum Fixtures",
+          "type": "integer"
+        },
+        "one_time_evaluation": {
+          "default": true,
+          "title": "One Time Evaluation",
+          "type": "boolean"
+        },
+        "salt_id": {
+          "minLength": 1,
+          "title": "Salt Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fraction",
+        "salt_id",
+        "minimum_fixtures"
+      ],
+      "title": "HoldoutSpec",
+      "type": "object"
+    },
+    "Hypothesis": {
+      "additionalProperties": false,
+      "properties": {
+        "academic_references": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Academic References",
+          "type": "array"
+        },
+        "benchmark_id": {
+          "title": "Benchmark Id",
+          "type": "string"
+        },
+        "falsification_criteria": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Falsification Criteria",
+          "type": "array"
+        },
+        "hypothesis_id": {
+          "minLength": 1,
+          "title": "Hypothesis Id",
+          "type": "string"
+        },
+        "mechanism": {
+          "minLength": 10,
+          "title": "Mechanism",
+          "type": "string"
+        },
+        "primary_metric": {
+          "title": "Primary Metric",
+          "type": "string"
+        },
+        "statement": {
+          "minLength": 10,
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "hypothesis_id",
+        "statement",
+        "mechanism",
+        "falsification_criteria",
+        "primary_metric",
+        "benchmark_id"
+      ],
+      "title": "Hypothesis",
+      "type": "object"
+    },
+    "LatencyAssumptions": {
+      "additionalProperties": false,
+      "properties": {
+        "cancel_ms": {
+          "minimum": 0,
+          "title": "Cancel Ms",
+          "type": "integer"
+        },
+        "decision_ms": {
+          "minimum": 0,
+          "title": "Decision Ms",
+          "type": "integer"
+        },
+        "exchange_ms": {
+          "minimum": 0,
+          "title": "Exchange Ms",
+          "type": "integer"
+        },
+        "max_staleness_ms": {
+          "minimum": 0,
+          "title": "Max Staleness Ms",
+          "type": "integer"
+        },
+        "network_ms": {
+          "minimum": 0,
+          "title": "Network Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "decision_ms",
+        "network_ms",
+        "exchange_ms",
+        "cancel_ms",
+        "max_staleness_ms"
+      ],
+      "title": "LatencyAssumptions",
+      "type": "object"
+    },
+    "ModelParameter": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "title": "ModelParameter",
+      "type": "object"
+    },
+    "PurgedSplitSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "chronological": {
+          "default": true,
+          "title": "Chronological",
+          "type": "boolean"
+        },
+        "embargo_seconds": {
+          "minimum": 0,
+          "title": "Embargo Seconds",
+          "type": "integer"
+        },
+        "fixture_grouped": {
+          "default": true,
+          "title": "Fixture Grouped",
+          "type": "boolean"
+        },
+        "folds": {
+          "maximum": 20,
+          "minimum": 2,
+          "title": "Folds",
+          "type": "integer"
+        },
+        "min_test_fixtures": {
+          "minimum": 1,
+          "title": "Min Test Fixtures",
+          "type": "integer"
+        },
+        "min_train_fixtures": {
+          "minimum": 1,
+          "title": "Min Train Fixtures",
+          "type": "integer"
+        },
+        "purge_seconds": {
+          "minimum": 0,
+          "title": "Purge Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "folds",
+        "min_train_fixtures",
+        "min_test_fixtures",
+        "purge_seconds",
+        "embargo_seconds"
+      ],
+      "title": "PurgedSplitSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "data_mode": {
+      "$ref": "#/$defs/DataMode"
+    },
+    "data_snapshot_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Data Snapshot Hash",
+      "type": "string"
+    },
+    "experiment_id": {
+      "minLength": 1,
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "feature_manifest_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Feature Manifest Hash",
+      "type": "string"
+    },
+    "features": {
+      "items": {
+        "$ref": "#/$defs/FeatureDefinition"
+      },
+      "title": "Features",
+      "type": "array"
+    },
+    "fills": {
+      "$ref": "#/$defs/FillAssumptions"
+    },
+    "git_commit": {
+      "pattern": "^[0-9a-f]{7,64}$",
+      "title": "Git Commit",
+      "type": "string"
+    },
+    "holdout": {
+      "$ref": "#/$defs/HoldoutSpec"
+    },
+    "hypothesis": {
+      "$ref": "#/$defs/Hypothesis"
+    },
+    "implementation_claim": {
+      "title": "Implementation Claim",
+      "type": "string"
+    },
+    "latency": {
+      "$ref": "#/$defs/LatencyAssumptions"
+    },
+    "max_trials": {
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Max Trials",
+      "type": "integer"
+    },
+    "model_family": {
+      "title": "Model Family",
+      "type": "string"
+    },
+    "model_parameters": {
+      "items": {
+        "$ref": "#/$defs/ModelParameter"
+      },
+      "title": "Model Parameters",
+      "type": "array"
+    },
+    "primary_metrics": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Primary Metrics",
+      "type": "array"
+    },
+    "random_seed": {
+      "minimum": 0,
+      "title": "Random Seed",
+      "type": "integer"
+    },
+    "split": {
+      "$ref": "#/$defs/PurgedSplitSpec"
+    },
+    "stress_scenarios": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Stress Scenarios",
+      "type": "array"
+    },
+    "training_cutoff": {
+      "format": "date-time",
+      "title": "Training Cutoff",
+      "type": "string"
+    }
+  },
+  "required": [
+    "experiment_id",
+    "created_at",
+    "data_mode",
+    "hypothesis",
+    "features",
+    "split",
+    "holdout",
+    "latency",
+    "fills",
+    "model_family",
+    "model_parameters",
+    "random_seed",
+    "primary_metrics",
+    "stress_scenarios",
+    "max_trials",
+    "implementation_claim",
+    "data_snapshot_hash",
+    "git_commit",
+    "feature_manifest_hash",
+    "training_cutoff"
+  ],
+  "title": "ExperimentSpec",
+  "type": "object"
+}

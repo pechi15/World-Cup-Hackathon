@@ -1,0 +1,35 @@
+{
+  "schema_version": "COLAB_MANIFEST/1",
+  "authoritative_branch": "cursor/quant-agents",
+  "commit_source": "git rev-parse HEAD after checkout",
+  "default_data_mode": "SYNTHETIC_TEST",
+  "package_root": "research/quant_research",
+  "notebook": "research/notebooks/colab_runner.ipynb",
+  "experiment_config": "research/configs/experiment-spec.example.yaml",
+  "feature_manifest": "research/configs/feature-manifest.example.json",
+  "model_config": "research/configs/model-config.example.yaml",
+  "backtest_config": "research/configs/backtest-config.example.yaml",
+  "sanitized_samples": [
+    "data/samples/txodds/sanitized/replay-fixture.json",
+    "data/samples/historical/test-only/dixon-coles-fixtures.json"
+  ],
+  "optional_colab_secrets": [
+    "PERPLEXITY_API_KEY"
+  ],
+  "required_outputs": [
+    "run-metadata.json",
+    "experiment-spec.yaml",
+    "feature-manifest.json",
+    "dataset-manifest.json",
+    "fold-results.parquet",
+    "predictions.parquet",
+    "calibration-report.json",
+    "execution-report.json",
+    "markout-report.json",
+    "stress-tests.json",
+    "critic-review.json",
+    "promotion-decision.json",
+    "model-card.md",
+    "checksums.json"
+  ]
+}

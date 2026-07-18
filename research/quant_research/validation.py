@@ -13,6 +13,7 @@ from datetime import timedelta
 
 from .contracts import (
     CalibrationReport,
+    DataMode,
     ExperimentSpec,
     FoldAssignment,
     FoldEvidence,
@@ -305,7 +306,7 @@ def walk_forward_validation(
         for fold in folds
     )
     reasons = ["FIXTURE_GROUPED", "CHRONOLOGICAL", "PURGED", "HOLDOUT_SEALED"]
-    if spec.data_mode.value == "SYNTHETIC":
+    if spec.data_mode == DataMode.SYNTHETIC_TEST:
         reasons.extend(("SYNTHETIC_PIPELINE_ONLY", "NO_ALPHA_CLAIM"))
     if leakage:
         reasons.append("LEAKAGE_DETECTED")

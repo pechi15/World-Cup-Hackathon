@@ -1,0 +1,100 @@
+{
+  "$defs": {
+    "ArtifactChecksum": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "title": "ArtifactChecksum",
+      "type": "object"
+    },
+    "DataMode": {
+      "enum": [
+        "SYNTHETIC_TEST",
+        "SANITIZED_TXODDS",
+        "REAL_HISTORICAL",
+        "SYNTHETIC_TEST",
+        "SANITIZED_TXODDS",
+        "REAL_HISTORICAL"
+      ],
+      "title": "DataMode",
+      "type": "string"
+    },
+    "PromotionTarget": {
+      "enum": [
+        "REJECTED",
+        "RESEARCH_ONLY",
+        "PROMOTE_TO_REPLAY",
+        "PROMOTE_TO_PAPER"
+      ],
+      "title": "PromotionTarget",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "data_mode": {
+      "$ref": "#/$defs/DataMode"
+    },
+    "experiment_id": {
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "generated_files": {
+      "items": {
+        "$ref": "#/$defs/ArtifactChecksum"
+      },
+      "title": "Generated Files",
+      "type": "array"
+    },
+    "model_artifact": {
+      "$ref": "#/$defs/ArtifactChecksum"
+    },
+    "model_family": {
+      "title": "Model Family",
+      "type": "string"
+    },
+    "production_integrated": {
+      "default": false,
+      "title": "Production Integrated",
+      "type": "boolean"
+    },
+    "promotion_target": {
+      "$ref": "#/$defs/PromotionTarget"
+    },
+    "schema_version": {
+      "minLength": 1,
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "experiment_id",
+    "data_mode",
+    "model_family",
+    "model_artifact",
+    "generated_files",
+    "promotion_target"
+  ],
+  "title": "ArtifactMetadata",
+  "type": "object"
+}

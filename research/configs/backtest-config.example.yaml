@@ -1,0 +1,24 @@
+schema_version: BACKTEST_CONFIG/1
+latency:
+  decision_ms: 25
+  network_ms: 75
+  exchange_ms: 50
+  cancel_ms: 100
+  max_staleness_ms: 500
+fills:
+  mode: CROSS
+  queue_fraction: 1.0
+  slippage_bps: 0.0
+  fee_bps: 2.0
+  partial_fills: true
+stress_scenarios:
+  - name: DOUBLE_LATENCY
+    latency_multiplier: 2.0
+    slippage_multiplier: 1.0
+    fill_probability_multiplier: 1.0
+    probability_shock: 0.0
+  - name: WIDER_BOOK
+    latency_multiplier: 1.0
+    slippage_multiplier: 2.0
+    fill_probability_multiplier: 0.8
+    probability_shock: 0.005

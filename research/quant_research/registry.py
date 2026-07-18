@@ -19,6 +19,7 @@ from .contracts import (
     BacktestReport,
     HoldoutEvaluation,
     CriticReview,
+    DataMode,
     ExperimentSpec,
     EvidenceBinding,
     PromotionDecision,
@@ -296,7 +297,10 @@ class ArtifactRegistry:
             and challenger.calibration_verified
         ):
             raise ValueError("champion must reference a verified registered artifact")
-        if decision.target == PromotionTarget.PROMOTE_TO_PAPER and artifact.data_mode.value == "SYNTHETIC":
+        if (
+            decision.target == PromotionTarget.PROMOTE_TO_PAPER
+            and artifact.data_mode == DataMode.SYNTHETIC_TEST
+        ):
             raise ValueError("synthetic artifacts cannot be promoted to paper")
         if spec is None or validation is None or final_review is None or backtest is None:
             raise ValueError("complete deterministic gate evidence is required for champion promotion")

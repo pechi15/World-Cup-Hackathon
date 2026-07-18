@@ -1,0 +1,119 @@
+{
+  "$defs": {
+    "DataMode": {
+      "enum": [
+        "SYNTHETIC_TEST",
+        "SANITIZED_TXODDS",
+        "REAL_HISTORICAL",
+        "SYNTHETIC_TEST",
+        "SANITIZED_TXODDS",
+        "REAL_HISTORICAL"
+      ],
+      "title": "DataMode",
+      "type": "string"
+    },
+    "DatasetGeneratorSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "maximum": 100000,
+          "minimum": 40,
+          "title": "Count",
+          "type": "integer"
+        },
+        "name": {
+          "pattern": "^DETERMINISTIC_CALIBRATED_BINARY$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "count"
+      ],
+      "title": "DatasetGeneratorSpec",
+      "type": "object"
+    },
+    "DatasetSourceType": {
+      "enum": [
+        "DETERMINISTIC_GENERATOR",
+        "JSON_OBSERVATIONS",
+        "TXODDS_REPLAY"
+      ],
+      "title": "DatasetSourceType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "contains_settled_outcomes": {
+      "title": "Contains Settled Outcomes",
+      "type": "boolean"
+    },
+    "content_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "data_mode": {
+      "$ref": "#/$defs/DataMode"
+    },
+    "dataset_id": {
+      "minLength": 1,
+      "title": "Dataset Id",
+      "type": "string"
+    },
+    "fixture_count": {
+      "minimum": 0,
+      "title": "Fixture Count",
+      "type": "integer"
+    },
+    "generator": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DatasetGeneratorSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "record_count": {
+      "minimum": 0,
+      "title": "Record Count",
+      "type": "integer"
+    },
+    "sanitized": {
+      "title": "Sanitized",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "minLength": 1,
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_type": {
+      "$ref": "#/$defs/DatasetSourceType"
+    },
+    "source_uri": {
+      "minLength": 1,
+      "title": "Source Uri",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "dataset_id",
+    "data_mode",
+    "source_type",
+    "source_uri",
+    "content_hash",
+    "record_count",
+    "fixture_count",
+    "contains_settled_outcomes",
+    "sanitized"
+  ],
+  "title": "DatasetManifest",
+  "type": "object"
+}

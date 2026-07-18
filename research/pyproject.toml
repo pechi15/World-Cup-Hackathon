@@ -7,7 +7,16 @@ name = "world-cup-quant-research"
 version = "0.1.0"
 description = "Bounded quantitative research and independent model-governance framework"
 requires-python = ">=3.11"
-dependencies = ["pydantic>=2.8,<3"]
+dependencies = [
+  "jsonschema>=4.23,<5",
+  "pyarrow>=17,<20",
+  "pydantic>=2.8,<3",
+  "PyYAML>=6.0,<7",
+]
+
+[project.scripts]
+quant-colab-run = "quant_research.colab_runtime:main"
+quant-export-schemas = "quant_research.schema_export:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.3,<9", "mypy>=1.11,<2", "ruff>=0.6,<1"]
