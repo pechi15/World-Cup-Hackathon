@@ -3,9 +3,11 @@
 ## Authoritative state
 
 - Branch: `cursor/quant-agents`
-- Verified source revision: `6f9c529448b992cf5ac775e953f6cd329d056bcb`
-- Final milestone commit: the commit containing this report; its hash is reported
-  after commit because a Git commit cannot contain its own hash.
+- Verified parent revision: `6f9c529448b992cf5ac775e953f6cd329d056bcb`
+- Verified implementation commit:
+  `1e55a4ce4086333847c88e4ff8628a021b8bbe2d`
+- Final status-metadata commit: reported externally because a Git commit cannot
+  contain its own hash.
 - Scope: offline two-agent research governance, State-Space market filtering,
   and Dixon–Coles historical-score research only.
 - Production integration: none. `NullTheoProvider` remains the production
