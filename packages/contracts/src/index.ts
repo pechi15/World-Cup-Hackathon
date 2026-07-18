@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const SourceSchema = z.enum(["TXODDS", "SYNTHETIC", "REPLAY", "MANUAL_RESEARCH", "TEST_FIXTURE"]);
+export const SourceSchema = z.enum(["TXODDS", "SYNTHETIC", "REPLAY", "MANUAL_RESEARCH", "TEST_FIXTURE", "TXODDS_REPLAY", "TXODDS_LIVE", "MARKET_BASELINE", "BENCHMARK_THEO", "RESEARCH_MODEL"]);
 export type Source = z.infer<typeof SourceSchema>;
 
 export const MarketTypeSchema = z.enum([
@@ -333,3 +333,140 @@ export const PerformanceSnapshotSchema = z.object({
 export type PerformanceSnapshot = z.infer<typeof PerformanceSnapshotSchema>;
 
 export const awaitingTxoddsDisplay = "Awaiting TxODDS API";
+
+export const DemoReplayStatusSchema = z.enum(["READY", "RUNNING", "PAUSED", "COMPLETE"]);
+export type DemoReplayStatus = z.infer<typeof DemoReplayStatusSchema>;
+export const DemoEventTypeSchema = z.enum(["MARKET_UPDATE", "GOAL", "RED_CARD", "SHARP_MOVEMENT", "QUOTE_SUSPENSION", "QUOTE_RESUMPTION", "MAKER_FILL", "DIRECTIONAL_FILL", "SETTLEMENT", "INFO_SHOCK"]);
+export type DemoEventType = z.infer<typeof DemoEventTypeSchema>;
+export const DataModeSchema = z.enum(["synthetic", "replay", "txline"]);
+export type DataMode = z.infer<typeof DataModeSchema>;
+
+export const DemoReplayEventSchema = z.object({
+  eventId: z.string(),
+  index: z.number().int().nonnegative(),
+  replayTimeMs: z.number().int().nonnegative(),
+  fixtureId: z.string(),
+  eventType: DemoEventTypeSchema,
+  marketId: z.string().optional(),
+  selectionId: z.string().optional(),
+  marketProbability: z.number().min(0).max(1).optional(),
+  priceImpact: z.number().optional(),
+  description: z.string(),
+  provenance: ProvenanceSchema,
+});
+export type DemoReplayEvent = z.infer<typeof DemoReplayEventSchema>;
+
+export const DemoMarketRowSchema = z.object({
+  fixture: z.string(),
+  marketId: z.string(),
+  market: z.string(),
+  selectionId: z.string(),
+  selection: z.string(),
+  marketProbability: z.number().min(0).max(1),
+  theoProbability: z.number().min(0).max(1).nullable(),
+  uncertainty: z.number().nullable(),
+  edge: z.number().nullable(),
+  bid: z.number().min(0).max(1).nullable(),
+  ask: z.number().min(0).max(1).nullable(),
+  width: z.number().nullable(),
+  inventoryLean: z.number(),
+  directionalLean: z.number(),
+  bidSize: z.number().nullable(),
+  askSize: z.number().nullable(),
+  status: z.string(),
+  reasonCodes: z.array(z.string()),
+  provenance: ProvenanceSchema,
+});
+export type DemoMarketRow = z.infer<typeof DemoMarketRowSchema>;
+
+export const DemoChartPointSchema = z.object({
+  index: z.number().int().nonnegative(),
+  label: z.string(),
+  marketProbability: z.number().min(0).max(1),
+  theoProbability: z.number().min(0).max(1).nullable(),
+  bid: z.number().min(0).max(1).nullable(),
+  ask: z.number().min(0).max(1).nullable(),
+  eventType: DemoEventTypeSchema.optional(),
+});
+export type DemoChartPoint = z.infer<typeof DemoChartPointSchema>;
+
+export const DemoAuditEventSchema = z.object({
+  auditId: z.string(),
+  timestamp: z.string().datetime(),
+  replayIndex: z.number().int().nonnegative(),
+  marketObservation: z.string(),
+  theo: z.number().nullable(),
+  uncertainty: z.number().nullable(),
+  edge: z.number().nullable(),
+  width: z.number().nullable(),
+  widthComponents: z.record(z.string(), z.number()),
+  inventoryLean: z.number(),
+  directionalLean: z.number(),
+  proposedAction: z.string(),
+  riskChecks: z.array(z.string()),
+  finalAction: z.string(),
+  fillResult: z.string(),
+  strategyVersion: z.string(),
+  reasonCodes: z.array(z.string()),
+  provenance: ProvenanceSchema,
+});
+export type DemoAuditEvent = z.infer<typeof DemoAuditEventSchema>;
+
+export const DemoPerformanceSchema = z.object({
+  netPnl: z.number(),
+  grossPnl: z.number(),
+  sharpeRatio: z.number().nullable(),
+  sharpeWarning: z.string(),
+  maximumDrawdown: z.number(),
+  currentDrawdown: z.number(),
+  fillRate: z.number(),
+  turnover: z.number(),
+  quoteUptime: z.number(),
+  inventoryVariance: z.number(),
+  adverseSelectionMarkout: z.number(),
+  makerPnl: z.number(),
+  takerPnl: z.number(),
+});
+export type DemoPerformance = z.infer<typeof DemoPerformanceSchema>;
+
+export const DemoRiskScenarioSchema = z.object({
+  scenario: z.string(),
+  pnl: z.number(),
+  probability: z.number().min(0).max(1).nullable(),
+  utilization: z.number(),
+});
+export type DemoRiskScenario = z.infer<typeof DemoRiskScenarioSchema>;
+
+export const DemoStateSchema = z.object({
+  demoMode: z.boolean(),
+  dataMode: DataModeSchema,
+  dataSource: z.string(),
+  replayStatus: DemoReplayStatusSchema,
+  backendStatus: z.enum(["CONNECTED", "DISCONNECTED"]),
+  theoProvider: z.string(),
+  strategyStatus: z.string(),
+  killSwitch: z.boolean(),
+  lastMarketUpdate: z.string().datetime().nullable(),
+  dataFreshnessMs: z.number().nonnegative().nullable(),
+  speed: z.number(),
+  currentIndex: z.number().int().nonnegative(),
+  totalEvents: z.number().int().positive(),
+  marketRows: z.array(DemoMarketRowSchema),
+  chart: z.array(DemoChartPointSchema),
+  positions: z.array(PositionSchema),
+  risk: z.object({
+    worstCaseTerminalPnl: z.number(),
+    bestCaseTerminalPnl: z.number(),
+    maximumDrawdown: z.number(),
+    currentDrawdown: z.number(),
+    fixtureExposure: z.number(),
+    marketExposure: z.number(),
+    riskBudgetUtilization: z.number(),
+    scenarios: z.array(DemoRiskScenarioSchema),
+  }),
+  performance: DemoPerformanceSchema,
+  audit: z.array(DemoAuditEventSchema),
+  disclaimer: z.string(),
+  buildVersion: z.string(),
+});
+export type DemoState = z.infer<typeof DemoStateSchema>;
