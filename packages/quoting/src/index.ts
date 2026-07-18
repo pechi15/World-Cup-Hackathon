@@ -7,6 +7,9 @@ export type QuoteConfig = {
   volatilityCoefficient: number;
   movementCoefficient: number;
   stalenessCoefficient: number;
+  feedLatencyCoefficient: number;
+  executionLatencyCoefficient: number;
+  adverseSelectionCoefficient: number;
   concentrationCoefficient: number;
   inventoryCoefficient: number;
   minimumWidth: number;
@@ -22,12 +25,16 @@ export type QuoteInput = {
   recentVolatility: number;
   sharpMovementSignal: number;
   dataAgeMs: number;
+  feedLatencyMs?: number;
+  executionLatencyMs?: number;
+  adverseSelectionEstimate?: number;
   marketConcentration: number;
   remainingMarketRiskBudget: number;
   remainingFixtureRiskBudget: number;
   remainingPortfolioRiskBudget: number;
   worstCaseMarginalLiability: number;
   directionalSignal?: TradingSignal | null;
+  quoteMode?: "STANDARD" | "MARKET_BASELINE_MAKER_ONLY";
   riskLimits: RiskLimit;
   config: QuoteConfig;
 };
@@ -38,6 +45,9 @@ export const defaultQuoteConfig: QuoteConfig = {
   volatilityCoefficient: 0.4,
   movementCoefficient: 0.25,
   stalenessCoefficient: 0.000001,
+  feedLatencyCoefficient: 0.000001,
+  executionLatencyCoefficient: 0.000001,
+  adverseSelectionCoefficient: 0.25,
   concentrationCoefficient: 0.05,
   inventoryCoefficient: 0.02,
   minimumWidth: 0.01,
@@ -53,6 +63,9 @@ export function calculateHalfWidth(input: QuoteInput): number {
     input.config.volatilityCoefficient * input.recentVolatility +
     input.config.movementCoefficient * Math.abs(input.sharpMovementSignal) +
     input.config.stalenessCoefficient * input.dataAgeMs +
+    input.config.feedLatencyCoefficient * (input.feedLatencyMs ?? 0) +
+    input.config.executionLatencyCoefficient * (input.executionLatencyMs ?? 0) +
+    input.config.adverseSelectionCoefficient * Math.abs(input.adverseSelectionEstimate ?? 0) +
     input.config.concentrationCoefficient * input.marketConcentration +
     input.config.inventoryCoefficient * Math.abs(input.inventory?.quantity ?? 0) / Math.max(input.config.baseSize, 1);
   return Math.min(input.config.maximumWidth, Math.max(input.config.minimumWidth, raw));
@@ -74,7 +87,9 @@ export function calculateQuoteHeight(input: QuoteInput, width: number): { bidSiz
   const uncertaintyPenalty = 1 - Math.min(input.theo.uncertainty ?? 0, 0.9);
   const concentrationPenalty = 1 - Math.min(input.marketConcentration, 0.9);
   const widthPenalty = 1 - Math.min(width, input.riskLimits.maxQuoteWidth) / Math.max(input.riskLimits.maxQuoteWidth, 0.01) * 0.25;
-  const size = Math.max(0, Math.min(input.config.baseSize, (remainingBudget / liabilityUnit) * uncertaintyPenalty * concentrationPenalty * widthPenalty));
+  const latencyPenalty = 1 / (1 + Math.max(0, (input.feedLatencyMs ?? 0) + (input.executionLatencyMs ?? 0)) / 1000);
+  const inventoryPenalty = 1 / (1 + Math.abs(input.inventory?.quantity ?? 0) / Math.max(input.config.baseSize, 1));
+  const size = Math.max(0, Math.min(input.config.baseSize, (remainingBudget / liabilityUnit) * uncertaintyPenalty * concentrationPenalty * widthPenalty * latencyPenalty * inventoryPenalty));
   return { bidSize: size, askSize: size };
 }
 
@@ -82,7 +97,7 @@ export function generateQuote(input: QuoteInput): Quote {
   if (input.riskLimits.killSwitch || input.riskLimits.quoteSuspension) {
     return disabledQuote(input, ["KILL_SWITCH_OR_QUOTE_SUSPENSION"]);
   }
-  if (input.theo.status !== "AVAILABLE" || input.theo.probabilities === null || input.theo.uncertainty === null) {
+  if ((input.theo.status !== "AVAILABLE" && input.theo.status !== "AVAILABLE_BENCHMARK") || input.theo.probabilities === null || input.theo.uncertainty === null) {
     return disabledQuote(input, ["THEO_UNAVAILABLE", "TXODDS_API_NOT_CONNECTED"]);
   }
   const probability = input.theo.probabilities[input.selectionId];
@@ -91,7 +106,8 @@ export function generateQuote(input: QuoteInput): Quote {
   const width = calculateHalfWidth(input);
   if (width > input.riskLimits.maxQuoteWidth) return disabledQuote(input, ["WIDTH_LIMIT_EXCEEDED"]);
   const inventoryLean = calculateInventoryLean(input.inventory, input.config);
-  const directionalLean = calculateDirectionalLean(input.directionalSignal);
+  const marketBaselineMode = input.quoteMode === "MARKET_BASELINE_MAKER_ONLY" || input.theo.independentAlpha === false;
+  const directionalLean = marketBaselineMode ? 0 : calculateDirectionalLean(input.directionalSignal);
   const totalLean = inventoryLean + directionalLean;
   const center = Math.min(0.99, Math.max(0.01, probability + totalLean));
   const bid = Math.max(0.01, center - width);
@@ -110,9 +126,13 @@ export function generateQuote(input: QuoteInput): Quote {
     bidSize: height.bidSize,
     askSize: height.askSize,
     status: "LIVE",
-    reasonCodes: [],
+    reasonCodes: marketBaselineMode
+      ? ["MARKET_CONSENSUS_BENCHMARK", "NOT_PROPRIETARY_THEO", "NOT_PROVEN_ALPHA", "DIRECTIONAL_TRADING_DISABLED", "KELLY_DISABLED"]
+      : [],
     generatedAt: new Date().toISOString(),
-    provenance: { source: "SYNTHETIC", notes: "Deterministic quote from injected theo; not live production data." },
+    provenance: marketBaselineMode
+      ? { source: input.theo.source === "TXODDS" ? "TXODDS" : "REPLAY", notes: "Paper maker quote centred on non-independent market consensus; not proprietary alpha." }
+      : { source: "SYNTHETIC", notes: "Deterministic quote from injected theo; not live production data." },
   };
 }
 

@@ -3,6 +3,13 @@ import type { NormalizedMarketObservation } from "../../market-data/src/event-st
 import type { TheoProvider, TheoRequest } from "./types.js";
 import { cleanDemarginedProbabilities, overround, proportionalDevig } from "./devig.js";
 
+type ConnectionStatus = "NOT_CONFIGURED" | "AWAITING_CREDENTIALS" | "CONNECTING" | "CONNECTED" | "DEGRADED" | "DISCONNECTED" | "AUTH_EXPIRED";
+
+export type MarketBaselineProviderOptions = {
+  liveTxodds?: boolean;
+  connectionStatus?: () => ConnectionStatus;
+};
+
 export type MarketProbabilityInput = {
   selectionIds: string[];
   /** Raw implied probs from decimal odds (may sum > 1). */
@@ -17,10 +24,11 @@ export class MarketBaselineTheoProvider implements TheoProvider {
   constructor(private readonly probsByMarket = new Map<string, {
     probabilities: Record<string, number>;
     source: "TXODDS" | "REPLAY";
+    probabilityField: "STABLE_PRICE" | "PRICES_DECIMAL";
     reasonCodes: string[];
     eventTime: string | null;
     receiveTime: string | null;
-  }>()) {}
+  }>(), private readonly options: MarketBaselineProviderOptions = {}) {}
 
   setMarketProbabilities(
     marketId: string,
@@ -38,6 +46,7 @@ export class MarketBaselineTheoProvider implements TheoProvider {
     this.probsByMarket.set(marketId, {
       probabilities: record,
       source: "REPLAY",
+      probabilityField: semantics === "RAW_BOOK_IMPLIED" ? "PRICES_DECIMAL" : "STABLE_PRICE",
       reasonCodes: [
         semantics === "RAW_BOOK_IMPLIED" ? "DEVIG_APPLIED_ONCE" : "DOUBLE_DEVIG_SKIPPED",
         "BENCHMARK_ONLY",
@@ -61,6 +70,7 @@ export class MarketBaselineTheoProvider implements TheoProvider {
     this.probsByMarket.set(observation.marketId, {
       probabilities,
       source: observation.provenance.source === "TXODDS" ? "TXODDS" : "REPLAY",
+      probabilityField: observation.probabilityField,
       reasonCodes: [
         ...observation.provenance.reasonCodes,
         "BENCHMARK_ONLY",
@@ -76,6 +86,26 @@ export class MarketBaselineTheoProvider implements TheoProvider {
   }
 
   async getTheo(input: TheoRequest): Promise<TheoEstimate> {
+    const connectionStatus = this.options.connectionStatus?.() ?? "CONNECTED";
+    if (this.options.liveTxodds && connectionStatus !== "CONNECTED") {
+      return {
+        marketId: input.market.marketId,
+        probabilities: null,
+        uncertainty: null,
+        modelVersion: "market-baseline-v1",
+        generatedAt: input.asOf ?? new Date().toISOString(),
+        source: null,
+        status: connectionStatus === "DEGRADED" || connectionStatus === "AUTH_EXPIRED" ? "STALE" : "AWAITING_TXODDS_API",
+        reasonCodes: [
+          `TXODDS_${connectionStatus}`,
+          "MARKET_BASELINE_UNAVAILABLE",
+          "DIRECTIONAL_TRADING_DISABLED",
+          "KELLY_DISABLED",
+        ],
+        provenance: "TXODDS_MARKET_BASELINE",
+        independentAlpha: false,
+      };
+    }
     const entry = this.probsByMarket.get(input.market.marketId);
     if (!entry) {
       return {
@@ -86,7 +116,9 @@ export class MarketBaselineTheoProvider implements TheoProvider {
         generatedAt: input.asOf ?? new Date().toISOString(),
         source: null,
         status: "INSUFFICIENT_DATA",
-        reasonCodes: ["MARKET_BASELINE_NO_PRICES", "BENCHMARK_ONLY"],
+        reasonCodes: ["MARKET_BASELINE_NO_PRICES", "MARKET_CONSENSUS_BENCHMARK", "NOT_PROPRIETARY_THEO"],
+        provenance: this.options.liveTxodds ? "TXODDS_MARKET_BASELINE" : undefined,
+        independentAlpha: false,
       };
     }
     const asOfMs = Date.parse(input.asOf ?? new Date().toISOString());
@@ -110,11 +142,24 @@ export class MarketBaselineTheoProvider implements TheoProvider {
       marketId: input.market.marketId,
       probabilities: entry.probabilities,
       uncertainty: Math.max(0.01, Math.abs(overround(Object.values(entry.probabilities))) + 0.02),
-      modelVersion: "MARKET_BASELINE/0.1.0",
+      modelVersion: this.options.liveTxodds ? "market-baseline-v1" : "MARKET_BASELINE/0.1.0",
       generatedAt: input.asOf ?? new Date().toISOString(),
       source: entry.source,
-      status: "AVAILABLE",
-      reasonCodes: [...entry.reasonCodes, `impliedMass≈${impliedSum.toFixed(4)}`],
+      status: this.options.liveTxodds ? "AVAILABLE_BENCHMARK" : "AVAILABLE",
+      reasonCodes: this.options.liveTxodds
+        ? [
+            ...entry.reasonCodes,
+            "MARKET_CONSENSUS_BENCHMARK",
+            "NOT_PROPRIETARY_THEO",
+            "NOT_PROVEN_ALPHA",
+            "DIRECTIONAL_TRADING_DISABLED",
+            "KELLY_DISABLED",
+            `impliedMass≈${impliedSum.toFixed(4)}`,
+          ]
+        : [...entry.reasonCodes, `impliedMass≈${impliedSum.toFixed(4)}`],
+      provenance: this.options.liveTxodds ? "TXODDS_MARKET_BASELINE" : undefined,
+      independentAlpha: false,
+      probabilityField: entry.probabilityField,
     };
   }
 }

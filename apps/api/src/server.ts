@@ -9,8 +9,10 @@ import {
   ReplayTxoddsAdapter,
   TxlineReadOnlyAdapter,
   invalidConfigStatus,
+  mapFixture,
   mapOddsUpdateToMarket,
   resolveDataRuntimeConfig,
+  toNormalizedMarketObservation,
 } from "../../../packages/market-data/src/index.js";
 import { NullTheoProvider, PipelineTheoProvider, resolveResearchTheoMode } from "../../../packages/theo/src/index.js";
 import { defaultQuoteConfig, generateQuote } from "../../../packages/quoting/src/index.js";
@@ -21,6 +23,11 @@ import { PaperExecutionEngine } from "../../../packages/execution/src/index.js";
 import { buildPerformanceSnapshot } from "../../../packages/evaluation/src/index.js";
 import { ReplayClock } from "../../../packages/replay/src/index.js";
 import { AutonomousTradingLoop } from "../../../packages/agent/src/index.js";
+import {
+  assertMarketBaselineStartupSafe,
+  LiveMarketBaselineRuntime,
+  resolveMarketBaselineRuntimeConfig,
+} from "../../../packages/live-market-baseline/src/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 8787);
@@ -31,6 +38,8 @@ const dataConfig = resolveDataRuntimeConfig(process.env);
 const liveAdapter = dataConfig.valid && dataConfig.mode === "txline" ? new TxlineReadOnlyAdapter(dataConfig) : null;
 const useReplayData = dataConfig.valid && dataConfig.mode === "replay";
 const useTxlineData = dataConfig.valid && dataConfig.mode === "txline";
+const marketBaselineConfig = resolveMarketBaselineRuntimeConfig(process.env);
+assertMarketBaselineStartupSafe(marketBaselineConfig);
 
 const replayAdapter = new ReplayTxoddsAdapter();
 let replayLoaded = false;
@@ -50,7 +59,10 @@ const requestedTheoMode = resolveResearchTheoMode(process.env.THEO_MODE ?? (useR
 const pipelineTheo = new PipelineTheoProvider(requestedTheoMode ?? "REPLAY");
 const nullTheo = new NullTheoProvider();
 const useReplayTheo = useReplayData && replayLoaded && requestedTheoMode !== null;
-const theoProvider = useReplayTheo ? pipelineTheo : nullTheo;
+const marketBaselineRuntime = useTxlineData && marketBaselineConfig.enabled
+  ? new LiveMarketBaselineRuntime(marketBaselineConfig, defaultRiskLimits)
+  : null;
+const theoProvider = marketBaselineRuntime?.provider ?? (useReplayTheo ? pipelineTheo : nullTheo);
 
 const execution = new PaperExecutionEngine();
 let pipelineSeeded = false;
@@ -60,8 +72,8 @@ let orders: Order[] = [];
 let fills: Fill[] = [];
 const strategies = [
   { strategyId: "no-theo-no-action", enabled: false, status: "THEO_UNAVAILABLE" },
-  { strategyId: "autonomous-maker", enabled: true, status: useReplayTheo ? "READY" : "THEO_UNAVAILABLE" },
-  { strategyId: "autonomous-directional", enabled: true, status: useReplayTheo ? "READY" : "THEO_UNAVAILABLE" },
+  { strategyId: "autonomous-maker", enabled: useReplayTheo || Boolean(marketBaselineRuntime), status: useReplayTheo || marketBaselineRuntime ? "READY" : "THEO_UNAVAILABLE" },
+  { strategyId: "autonomous-directional", enabled: useReplayTheo, status: useReplayTheo ? "READY" : marketBaselineRuntime ? "DISABLED_NON_INDEPENDENT_THEO" : "THEO_UNAVAILABLE" },
 ];
 
 const loop = new AutonomousTradingLoop({
@@ -74,6 +86,32 @@ const loop = new AutonomousTradingLoop({
 
 let clock = new ReplayClock(replayAdapter.store.events());
 let lastAudit = loop.state.audit.at(-1) ?? null;
+const liveMarkets = new Map<string, ReturnType<typeof mapOddsUpdateToMarket>>();
+let liveFixtures: ReturnType<typeof mapFixture>[] = [];
+let refreshInFlight: Promise<void> | null = null;
+
+async function refreshLiveMarketBaseline(): Promise<void> {
+  if (!liveAdapter || !marketBaselineRuntime || !marketBaselineConfig.valid) return;
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const capture = await liveAdapter.captureLiveSnapshot();
+      marketBaselineRuntime.setConnectionStatus(liveAdapter.status, capture.capturedAt);
+      liveFixtures = capture.fixtures.map((fixture) => mapFixture(fixture, "TXODDS"));
+      for (const event of capture.oddsEvents) {
+        const market = mapOddsUpdateToMarket(event.update, "TXODDS");
+        liveMarkets.set(market.marketId, market);
+        await marketBaselineRuntime.onObservation(market, toNormalizedMarketObservation(event));
+      }
+    } catch (error) {
+      marketBaselineRuntime.setConnectionStatus(liveAdapter.status, new Date().toISOString());
+      throw error;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
 
 function send(res: http.ServerResponse, statusCode: number, body: unknown) {
   res.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
@@ -93,7 +131,13 @@ async function activeMarkets() {
     if (discovered.length) return discovered;
     return [];
   }
-  if (useTxlineData && liveAdapter) return liveAdapter.discoverMarkets();
+  if (useTxlineData && liveAdapter) {
+    if (marketBaselineRuntime) {
+      await refreshLiveMarketBaseline();
+      return [...liveMarkets.values()];
+    }
+    return liveAdapter.discoverMarkets();
+  }
   return [];
 }
 
@@ -103,7 +147,13 @@ async function activeFixtures() {
     if (discovered.length) return discovered;
     return [];
   }
-  if (useTxlineData && liveAdapter) return liveAdapter.discoverFixtures();
+  if (useTxlineData && liveAdapter) {
+    if (marketBaselineRuntime) {
+      await refreshLiveMarketBaseline();
+      return [...liveFixtures];
+    }
+    return liveAdapter.discoverFixtures();
+  }
   return [];
 }
 
@@ -132,6 +182,11 @@ async function ensureTheoSeeded() {
 }
 
 async function quotes() {
+  if (marketBaselineRuntime) {
+    await refreshLiveMarketBaseline();
+    marketBaselineRuntime.expireQuotes(new Date().toISOString());
+    return marketBaselineRuntime.activeQuotes();
+  }
   await ensureTheoSeeded();
   const markets = await activeMarkets();
   const result = [];
@@ -207,17 +262,52 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
       ok: true,
       dataStatus: dataStatus(),
       dataMode: dataConfig.mode,
-      theoMode: useReplayTheo ? "PIPELINE_REPLAY" : "NULL",
+      theoMode: marketBaselineRuntime ? "MARKET_BASELINE" : useReplayTheo ? "PIPELINE_REPLAY" : "NULL",
       replayLoaded,
+    });
+  }
+  if (req.method === "GET" && pathName === "/ready") {
+    if (marketBaselineRuntime) {
+      try {
+        await refreshLiveMarketBaseline();
+      } catch {
+        // The truthful adapter and theo statuses below carry the failure.
+      }
+    }
+    const status = dataStatus();
+    const baseline = marketBaselineRuntime?.status();
+    const ready = status.status === "CONNECTED" && (!marketBaselineRuntime || baseline?.theo.status === "AVAILABLE_BENCHMARK");
+    return send(res, ready ? 200 : 503, { ok: ready, dataStatus: status, theoStatus: baseline?.theo ?? null });
+  }
+  if (req.method === "GET" && pathName === "/api/txodds/status") return send(res, 200, dataStatus());
+  if (req.method === "GET" && pathName === "/api/theo/status") {
+    if (marketBaselineRuntime) return send(res, 200, marketBaselineRuntime.status().theo);
+    return send(res, 200, {
+      status: useReplayTheo ? "AVAILABLE_REPLAY" : "UNAVAILABLE",
+      provenance: useReplayTheo ? "REPLAY_RESEARCH_ONLY" : null,
+      independentAlpha: false,
+      reasonCodes: useReplayTheo ? ["RESEARCH_ONLY"] : ["NO_APPROVED_THEO"],
+    });
+  }
+  if (req.method === "GET" && pathName === "/api/trading/status") {
+    if (marketBaselineRuntime) return send(res, 200, marketBaselineRuntime.status().trading);
+    return send(res, 200, {
+      maker: useReplayTheo ? "REPLAY_ENABLED" : "DISABLED",
+      directional: useReplayTheo ? "REPLAY_ENABLED" : "DISABLED",
+      kelly: useReplayTheo ? "REPLAY_ENABLED" : "DISABLED",
+      realExecution: "DISABLED",
     });
   }
   if (req.method === "GET" && pathName === "/api/config") {
     return send(res, 200, {
       network: "devnet-ready",
       txodds: dataStatus(),
-      theoDisplay: useReplayTheo ? "Research pipeline theo (MarketBaseline→StateSpace posterior)" : awaitingTxoddsDisplay,
+      theoDisplay: marketBaselineRuntime
+        ? "Market benchmark — paper maker only — no proprietary theo — not proven alpha"
+        : useReplayTheo ? "Research pipeline theo (MarketBaseline→StateSpace posterior)" : awaitingTxoddsDisplay,
       riskLimits,
-      theoMode: useReplayTheo ? "replay" : "null",
+      theoMode: marketBaselineRuntime ? "market_baseline" : useReplayTheo ? "replay" : "null",
+      marketBaseline: marketBaselineRuntime?.status() ?? null,
     });
   }
   if (req.method === "GET" && pathName === "/api/fixtures") return send(res, 200, await activeFixtures());
@@ -246,37 +336,48 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
   }
   if (req.method === "GET" && pathName === "/api/quotes") return send(res, 200, await quotes());
   if (req.method === "GET" && pathName === "/api/positions") {
-    return send(res, 200, useReplayTheo ? loop.state.portfolio.positions : portfolio.positions);
+    return send(res, 200, marketBaselineRuntime?.portfolio.positions ?? (useReplayTheo ? loop.state.portfolio.positions : portfolio.positions));
   }
   if (req.method === "GET" && pathName === "/api/portfolio") {
-    return send(res, 200, useReplayTheo ? loop.state.portfolio : portfolio);
+    return send(res, 200, marketBaselineRuntime?.portfolio ?? (useReplayTheo ? loop.state.portfolio : portfolio));
   }
   if (req.method === "GET" && pathName === "/api/risk") {
     const markets = await activeMarkets();
     const fixtureId = (await activeFixtures())[0]?.fixtureId ?? "fixture-test-001";
-    const scenarios = defaultScoreScenarios(fixtureId, useReplayTheo ? "REPLAY" : "TEST_FIXTURE");
-    const pf = useReplayTheo ? loop.state.portfolio : portfolio;
+    const scenarios = defaultScoreScenarios(fixtureId, marketBaselineRuntime ? "TXODDS" : useReplayTheo ? "REPLAY" : "TEST_FIXTURE");
+    const pf = marketBaselineRuntime?.portfolio ?? (useReplayTheo ? loop.state.portfolio : portfolio);
     const terminal = terminalOutcomeRisk(pf, markets, scenarios, null);
     return send(res, 200, { snapshot: buildRiskSnapshot(pf, riskLimits, terminal), terminal });
   }
   if (req.method === "POST" && pathName === "/api/risk/scenario") {
     const body = await readJson(req) as { fixtureId?: string };
     const markets = await activeMarkets();
-    const scenarios = defaultScoreScenarios(body.fixtureId ?? "fixture-test-001", useReplayTheo ? "REPLAY" : "TEST_FIXTURE");
-    return send(res, 200, terminalOutcomeRisk(useReplayTheo ? loop.state.portfolio : portfolio, markets, scenarios, null));
+    const scenarios = defaultScoreScenarios(body.fixtureId ?? "fixture-test-001", marketBaselineRuntime ? "TXODDS" : useReplayTheo ? "REPLAY" : "TEST_FIXTURE");
+    return send(res, 200, terminalOutcomeRisk(marketBaselineRuntime?.portfolio ?? (useReplayTheo ? loop.state.portfolio : portfolio), markets, scenarios, null));
   }
-  if (req.method === "GET" && pathName === "/api/fills") return send(res, 200, useReplayTheo ? loop.state.fills : fills);
-  if (req.method === "GET" && pathName === "/api/orders") return send(res, 200, orders);
+  if (req.method === "GET" && pathName === "/api/fills") return send(res, 200, marketBaselineRuntime?.fills ?? (useReplayTheo ? loop.state.fills : fills));
+  if (req.method === "GET" && pathName === "/api/orders") return send(res, 200, marketBaselineRuntime?.orders ?? orders);
   if (req.method === "GET" && pathName === "/api/performance") {
-    return send(res, 200, buildPerformanceSnapshot(useReplayTheo ? loop.state.portfolio : portfolio));
+    return send(res, 200, buildPerformanceSnapshot(marketBaselineRuntime?.portfolio ?? (useReplayTheo ? loop.state.portfolio : portfolio)));
   }
   if (req.method === "GET" && pathName === "/api/strategies") return send(res, 200, strategies);
   if (req.method === "POST" && pathName.match(/^\/api\/strategies\/[^/]+\/enable$/)) {
+    if (marketBaselineRuntime) {
+      const strategyId = pathName.split("/")[3] ?? "";
+      if (strategyId === "autonomous-maker") return send(res, 200, { status: "PAPER_ENABLED", reasonCodes: ["MARKET_BASELINE_MAKER_ONLY"] });
+      return send(res, 409, { status: "DISABLED_NON_INDEPENDENT_THEO", reasonCodes: ["NON_INDEPENDENT_MARKET_BASELINE", "DIRECTIONAL_TRADING_DISABLED", "KELLY_DISABLED"] });
+    }
     if (!useReplayTheo) return send(res, 409, { status: "THEO_UNAVAILABLE", reasonCodes: ["TXODDS_API_NOT_CONNECTED"] });
     return send(res, 200, { status: "READY" });
   }
   if (req.method === "POST" && pathName.match(/^\/api\/strategies\/[^/]+\/disable$/)) return send(res, 200, { status: "DISABLED" });
   if (req.method === "POST" && pathName === "/api/orders/paper") {
+    if (marketBaselineRuntime) {
+      return send(res, 403, {
+        error: "DIRECT_ORDER_SUBMISSION_DISABLED",
+        reasonCodes: ["MARKET_BASELINE_MAKER_ONLY", "FUTURE_CROSS_EXECUTION_REQUIRED", "DIRECTIONAL_TRADING_DISABLED"],
+      });
+    }
     const body = await readJson(req) as Partial<Order>;
     const markets = await activeMarkets();
     const market = markets.find((item) => item.marketId === body.marketId);
@@ -303,11 +404,13 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
   if (req.method === "POST" && pathName === "/api/kill-switch/enable") {
     riskLimits = { ...riskLimits, killSwitch: true };
     loop.setRiskLimits(riskLimits);
+    marketBaselineRuntime?.setRiskLimits(riskLimits);
     return send(res, 200, { killSwitch: true });
   }
   if (req.method === "POST" && pathName === "/api/kill-switch/disable") {
     riskLimits = { ...riskLimits, killSwitch: false };
     loop.setRiskLimits(riskLimits);
+    marketBaselineRuntime?.setRiskLimits(riskLimits);
     return send(res, 200, { killSwitch: false });
   }
 
@@ -365,7 +468,7 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
   }
 
   if (req.method === "GET" && pathName === "/api/demo/snapshot") return send(res, 200, demoSnapshot());
-  if (req.method === "GET" && pathName === "/api/audit") return send(res, 200, loop.state.audit);
+  if (req.method === "GET" && pathName === "/api/audit") return send(res, 200, marketBaselineRuntime?.audit ?? loop.state.audit);
 
   return send(res, 404, { error: "NOT_FOUND" });
 }
@@ -375,9 +478,21 @@ if (process.argv[1]?.endsWith("server.ts")) {
     if (liveAdapter) {
       try {
         await liveAdapter.connect();
+        marketBaselineRuntime?.setConnectionStatus(liveAdapter.status, new Date().toISOString());
+        await refreshLiveMarketBaseline();
       } catch (error) {
+        marketBaselineRuntime?.setConnectionStatus(liveAdapter.status, new Date().toISOString());
         console.error(`TxLINE startup connection failed: ${error instanceof Error ? error.message : "unknown error"}`);
       }
+    }
+    if (marketBaselineRuntime) {
+      const refreshIntervalMs = Number(process.env.TXLINE_REFRESH_INTERVAL_MS ?? 15_000);
+      const timer = setInterval(() => {
+        refreshLiveMarketBaseline().catch((error) => {
+          console.error(`TxLINE baseline refresh failed: ${error instanceof Error ? error.message : "unknown error"}`);
+        });
+      }, Number.isFinite(refreshIntervalMs) && refreshIntervalMs >= 1_000 ? refreshIntervalMs : 15_000);
+      timer.unref();
     }
     http.createServer((req, res) => {
       route(req, res).catch((error) => send(res, 500, {
@@ -386,10 +501,10 @@ if (process.argv[1]?.endsWith("server.ts")) {
       }));
     }).listen(port, () => {
       console.log(`World Cup market-making API listening on http://localhost:${port}`);
-      console.log(`Data mode: ${dataConfig.mode}; theo mode: ${useReplayTheo ? "replay pipeline" : "null"}; replayLoaded=${replayLoaded}`);
+      console.log(`Data mode: ${dataConfig.mode}; theo mode: ${marketBaselineRuntime ? "market baseline" : useReplayTheo ? "replay pipeline" : "null"}; replayLoaded=${replayLoaded}`);
     });
   };
   void start();
 }
 
-export { route, loop, clock, replayAdapter, liveAdapter, dataConfig, pipelineTheo, useReplayTheo, nullTheo };
+export { route, loop, clock, replayAdapter, liveAdapter, dataConfig, pipelineTheo, useReplayTheo, nullTheo, marketBaselineRuntime, marketBaselineConfig };

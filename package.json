@@ -6,7 +6,9 @@
   "scripts": {
     "dev:api": "tsx apps/api/src/server.ts",
     "start": "tsx apps/api/src/server.ts",
+    "build": "tsc --outDir dist",
     "export:colab-data": "tsx scripts/export-colab-data.ts",
+    "record:live-baseline": "tsx scripts/record-live-market-baseline.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

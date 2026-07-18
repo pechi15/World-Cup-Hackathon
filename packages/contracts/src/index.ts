@@ -30,14 +30,14 @@ export type MarketType = z.infer<typeof MarketTypeSchema>;
 
 export const MarketStatusSchema = z.enum(["DRAFT", "OPEN", "SUSPENDED", "SETTLED", "CANCELLED"]);
 export const OutcomeTypeSchema = z.enum(["YES", "NO", "HOME", "DRAW", "AWAY", "OVER", "UNDER", "TEAM", "PLAYER", "OTHER"]);
-export const TheoStatusSchema = z.enum(["AVAILABLE", "AWAITING_TXODDS_API", "INSUFFICIENT_DATA", "STALE", "MODEL_ERROR", "UNSUPPORTED_MARKET"]);
+export const TheoStatusSchema = z.enum(["AVAILABLE", "AVAILABLE_BENCHMARK", "AWAITING_TXODDS_API", "INSUFFICIENT_DATA", "STALE", "MODEL_ERROR", "UNSUPPORTED_MARKET"]);
 export const QuoteStatusSchema = z.enum(["LIVE", "QUOTING_DISABLED", "LIMIT_BLOCKED", "MARKET_CLOSED"]);
 export const StrategyActionSchema = z.enum(["BUY", "SELL", "HOLD", "NO_ACTION"]);
 export const StrategyStatusSchema = z.enum(["READY", "THEO_UNAVAILABLE", "DISABLED", "LIMIT_BLOCKED", "MODEL_ERROR"]);
 export const OrderStatusSchema = z.enum(["NEW", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED", "EXPIRED"]);
 export const OrderSideSchema = z.enum(["BUY", "SELL"]);
 export const ExecutionStyleSchema = z.enum(["MAKER", "TAKER"]);
-export const TxoddsAdapterStatusSchema = z.enum(["NOT_CONFIGURED", "AWAITING_CREDENTIALS", "CONNECTED", "DEGRADED", "DISCONNECTED"]);
+export const TxoddsAdapterStatusSchema = z.enum(["NOT_CONFIGURED", "AWAITING_CREDENTIALS", "CONNECTING", "CONNECTED", "DEGRADED", "DISCONNECTED", "AUTH_EXPIRED"]);
 
 export const ProvenanceSchema = z.object({
   source: SourceSchema,
@@ -177,6 +177,9 @@ export const TheoEstimateSchema = z.object({
   source: SourceSchema.nullable(),
   status: TheoStatusSchema,
   reasonCodes: z.array(z.string()),
+  provenance: z.string().optional(),
+  independentAlpha: z.boolean().optional(),
+  probabilityField: z.enum(["STABLE_PRICE", "PRICES_DECIMAL"]).optional(),
 });
 export type TheoEstimate = z.infer<typeof TheoEstimateSchema>;
 
