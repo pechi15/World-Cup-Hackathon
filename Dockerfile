@@ -19,4 +19,4 @@ COPY --from=build /app/apps ./apps
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/data/samples/demo ./data/samples/demo
 EXPOSE 8787
-CMD ["npm", "run", "demo"]
+CMD ["npm", "run", "start"]

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "tsx apps/api/src/server.ts",
     "dev": "npm-run-all --parallel dev:api dev:web",
     "dev:api": "tsx apps/api/src/server.ts",
     "dev:web": "vite --host 0.0.0.0 --config apps/web/vite.config.ts",
@@ -19,6 +20,7 @@
     "recharts": "^3.6.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "tsx": "^4.20.6",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -31,7 +33,6 @@
     "@playwright/test": "^1.57.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
-    "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vite": "^7.3.0",
     "vitest": "^4.0.15"

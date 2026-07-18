@@ -5,6 +5,7 @@
   },
   "deploy": {
     "healthcheckPath": "/health",
+    "startCommand": "npm run start",
     "restartPolicyType": "ON_FAILURE"
   }
 }
