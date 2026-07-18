@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "table": "fixtures",
+  "required": [
+    "fixture_id",
+    "competition_id",
+    "home_team_id",
+    "away_team_id",
+    "source",
+    "provenance"
+  ]
+}

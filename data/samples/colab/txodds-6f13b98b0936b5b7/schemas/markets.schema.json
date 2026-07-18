@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "table": "markets",
+  "required": [
+    "fixture_id",
+    "market_id",
+    "market_type",
+    "selections",
+    "settlement_rules",
+    "source",
+    "provenance"
+  ]
+}

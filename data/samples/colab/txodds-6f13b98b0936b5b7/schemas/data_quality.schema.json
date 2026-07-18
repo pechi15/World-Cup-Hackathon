@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "table": "data_quality",
+  "required": [
+    "flag_id",
+    "scope",
+    "severity",
+    "code",
+    "details"
+  ]
+}

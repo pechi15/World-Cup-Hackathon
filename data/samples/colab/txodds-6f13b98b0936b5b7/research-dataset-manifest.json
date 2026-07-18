@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "dataset_id": "txodds-6f13b98b0936b5b7",
+  "data_mode": "SANITIZED_TXODDS",
+  "source_type": "TXODDS_REPLAY",
+  "source_uri": "data/samples/colab/sanitized-mini-input.json",
+  "content_hash": "6f13b98b0936b5b7383a0e8a40ec59df9f5ae6c79ffc81d95138eba1662e8450",
+  "record_count": 12,
+  "fixture_count": 1,
+  "contains_settled_outcomes": true,
+  "sanitized": true,
+  "generator": null
+}

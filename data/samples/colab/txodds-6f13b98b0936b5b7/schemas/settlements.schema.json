@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "table": "settlements",
+  "required": [
+    "fixture_id",
+    "market_id",
+    "selection_id",
+    "payout",
+    "settled_at",
+    "available_at",
+    "source",
+    "provenance"
+  ]
+}

@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev:api": "tsx apps/api/src/server.ts",
+    "start": "tsx apps/api/src/server.ts",
+    "export:colab-data": "tsx scripts/export-colab-data.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

@@ -15,6 +15,8 @@ export type TxoddsAdapterConfig = {
 
 export * from "./event-store.js";
 export * from "./mapper.js";
+export * from "./config.js";
+export * from "./txline-readonly.js";
 
 export class DisabledTxoddsAdapter {
   readonly status: TxoddsAdapterStatus;

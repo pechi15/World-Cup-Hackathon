@@ -3,9 +3,15 @@ import path from "node:path";
 import http from "node:http";
 import { fileURLToPath } from "node:url";
 import { URL } from "node:url";
-import { markets as sampleMarkets, fixtures as sampleFixtures, marketPrices, defaultRiskLimits } from "./sample-data.js";
+import { marketPrices, defaultRiskLimits } from "./sample-data.js";
 import { awaitingTxoddsDisplay, type Fill, type Order } from "../../../packages/contracts/src/index.js";
-import { DisabledTxoddsAdapter, ReplayTxoddsAdapter, mapOddsUpdateToMarket } from "../../../packages/market-data/src/index.js";
+import {
+  ReplayTxoddsAdapter,
+  TxlineReadOnlyAdapter,
+  invalidConfigStatus,
+  mapOddsUpdateToMarket,
+  resolveDataRuntimeConfig,
+} from "../../../packages/market-data/src/index.js";
 import { NullTheoProvider, PipelineTheoProvider, resolveResearchTheoMode } from "../../../packages/theo/src/index.js";
 import { defaultQuoteConfig, generateQuote } from "../../../packages/quoting/src/index.js";
 import { createEmptyPortfolio, markPortfolio } from "../../../packages/portfolio/src/index.js";
@@ -21,13 +27,10 @@ const port = Number(process.env.PORT ?? 8787);
 const replayPath = process.env.REPLAY_FIXTURE_PATH
   ?? path.resolve(__dirname, "../../../data/samples/txodds/sanitized/replay-fixture.json");
 
-const liveAdapter = new DisabledTxoddsAdapter({
-  network: process.env.TXLINE_NETWORK,
-  apiOrigin: process.env.TXLINE_API_ORIGIN,
-  guestJwt: process.env.TXLINE_GUEST_JWT,
-  apiToken: process.env.TXLINE_API_TOKEN,
-  solanaRpcUrl: process.env.SOLANA_RPC_URL,
-});
+const dataConfig = resolveDataRuntimeConfig(process.env);
+const liveAdapter = dataConfig.valid && dataConfig.mode === "txline" ? new TxlineReadOnlyAdapter(dataConfig) : null;
+const useReplayData = dataConfig.valid && dataConfig.mode === "replay";
+const useTxlineData = dataConfig.valid && dataConfig.mode === "txline";
 
 const replayAdapter = new ReplayTxoddsAdapter();
 let replayLoaded = false;
@@ -43,10 +46,10 @@ try {
   replayLoaded = false;
 }
 
-const requestedTheoMode = resolveResearchTheoMode(process.env.THEO_MODE);
+const requestedTheoMode = resolveResearchTheoMode(process.env.THEO_MODE ?? (useReplayData ? "REPLAY" : undefined));
 const pipelineTheo = new PipelineTheoProvider(requestedTheoMode ?? "REPLAY");
 const nullTheo = new NullTheoProvider();
-const useReplayTheo = replayLoaded && requestedTheoMode !== null;
+const useReplayTheo = useReplayData && replayLoaded && requestedTheoMode !== null;
 const theoProvider = useReplayTheo ? pipelineTheo : nullTheo;
 
 const execution = new PaperExecutionEngine();
@@ -85,19 +88,37 @@ async function readJson(req: http.IncomingMessage): Promise<unknown> {
 }
 
 async function activeMarkets() {
-  if (useReplayTheo) {
+  if (useReplayData) {
     const discovered = await replayAdapter.discoverMarkets();
     if (discovered.length) return discovered;
+    return [];
   }
-  return sampleMarkets;
+  if (useTxlineData && liveAdapter) return liveAdapter.discoverMarkets();
+  return [];
 }
 
 async function activeFixtures() {
-  if (useReplayTheo) {
+  if (useReplayData) {
     const discovered = await replayAdapter.discoverFixtures();
     if (discovered.length) return discovered;
+    return [];
   }
-  return sampleFixtures;
+  if (useTxlineData && liveAdapter) return liveAdapter.discoverFixtures();
+  return [];
+}
+
+function dataStatus() {
+  if (useReplayData && replayLoaded) return replayAdapter.getSystemDataStatus();
+  if (useReplayData) return {
+    status: "NOT_CONFIGURED" as const,
+    display: "Replay fixture unavailable",
+    mode: "replay",
+    network: null,
+    readOnly: true,
+    reasonCodes: ["REPLAY_FIXTURE_NOT_LOADED"],
+  };
+  if (useTxlineData && liveAdapter) return liveAdapter.getSystemDataStatus();
+  return invalidConfigStatus(dataConfig as Extract<typeof dataConfig, { valid: false }>);
 }
 
 async function ensureTheoSeeded() {
@@ -173,7 +194,7 @@ function demoSnapshot() {
     innovation: audit?.innovation ?? 0,
     quoteSuspended: audit?.quoteSuspended ?? false,
     reasonCodes: audit?.reasonCodes ?? ["AWAITING_REPLAY_STEP"],
-    dataStatus: useReplayTheo ? replayAdapter.getSystemDataStatus() : liveAdapter.getSystemDataStatus(),
+    dataStatus: dataStatus(),
   };
 }
 
@@ -184,7 +205,8 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
   if (req.method === "GET" && pathName === "/health") {
     return send(res, 200, {
       ok: true,
-      dataStatus: useReplayTheo ? replayAdapter.getSystemDataStatus() : liveAdapter.getSystemDataStatus(),
+      dataStatus: dataStatus(),
+      dataMode: dataConfig.mode,
       theoMode: useReplayTheo ? "PIPELINE_REPLAY" : "NULL",
       replayLoaded,
     });
@@ -192,7 +214,7 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
   if (req.method === "GET" && pathName === "/api/config") {
     return send(res, 200, {
       network: "devnet-ready",
-      txodds: useReplayTheo ? replayAdapter.getSystemDataStatus() : liveAdapter.getSystemDataStatus(),
+      txodds: dataStatus(),
       theoDisplay: useReplayTheo ? "Research pipeline theo (MarketBaseline→StateSpace posterior)" : awaitingTxoddsDisplay,
       riskLimits,
       theoMode: useReplayTheo ? "replay" : "null",
@@ -209,7 +231,7 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
     await ensureTheoSeeded();
     const marketId = decodeURIComponent(pathName.split("/").at(-1) ?? "");
     const markets = await activeMarkets();
-    const market = markets.find((item) => item.marketId === marketId) ?? sampleMarkets.find((item) => item.marketId === marketId);
+    const market = markets.find((item) => item.marketId === marketId);
     return market
       ? send(res, 200, await theoProvider.getTheo({ market }))
       : send(res, 404, {
@@ -257,7 +279,7 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
   if (req.method === "POST" && pathName === "/api/orders/paper") {
     const body = await readJson(req) as Partial<Order>;
     const markets = await activeMarkets();
-    const market = markets.find((item) => item.marketId === body.marketId) ?? sampleMarkets.find((item) => item.marketId === body.marketId);
+    const market = markets.find((item) => item.marketId === body.marketId);
     if (!market) return send(res, 404, { error: "UNKNOWN_MARKET" });
     const order: Order = {
       orderId: body.orderId ?? `paper-${Date.now()}`,
@@ -349,15 +371,25 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
 }
 
 if (process.argv[1]?.endsWith("server.ts")) {
-  http.createServer((req, res) => {
-    route(req, res).catch((error) => send(res, 500, {
-      error: "INTERNAL_ERROR",
-      message: error instanceof Error ? error.message : String(error),
-    }));
-  }).listen(port, () => {
-    console.log(`World Cup market-making API listening on http://localhost:${port}`);
-    console.log(`Theo mode: ${useReplayTheo ? "replay pipeline" : "null"}; replayLoaded=${replayLoaded}`);
-  });
+  const start = async () => {
+    if (liveAdapter) {
+      try {
+        await liveAdapter.connect();
+      } catch (error) {
+        console.error(`TxLINE startup connection failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      }
+    }
+    http.createServer((req, res) => {
+      route(req, res).catch((error) => send(res, 500, {
+        error: "INTERNAL_ERROR",
+        message: error instanceof Error ? error.message : String(error),
+      }));
+    }).listen(port, () => {
+      console.log(`World Cup market-making API listening on http://localhost:${port}`);
+      console.log(`Data mode: ${dataConfig.mode}; theo mode: ${useReplayTheo ? "replay pipeline" : "null"}; replayLoaded=${replayLoaded}`);
+    });
+  };
+  void start();
 }
 
-export { route, loop, clock, replayAdapter, pipelineTheo, useReplayTheo, nullTheo };
+export { route, loop, clock, replayAdapter, liveAdapter, dataConfig, pipelineTheo, useReplayTheo, nullTheo };

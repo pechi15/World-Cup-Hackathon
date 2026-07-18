@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "table": "score_events",
+  "required": [
+    "score_event_id",
+    "fixture_id",
+    "event_time",
+    "receive_time",
+    "available_at",
+    "source",
+    "provenance"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "table": "raw_events",
+  "required": [
+    "event_id",
+    "event_time",
+    "receive_time",
+    "available_at",
+    "sequence_id",
+    "raw_fields"
+  ]
+}

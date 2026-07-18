@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0.0",
+  "table": "prediction_observations",
+  "required": [
+    "observation_id",
+    "fixture_id",
+    "event_time",
+    "available_at",
+    "decision_time",
+    "target_available_at",
+    "probability",
+    "baseline_probability",
+    "outcome",
+    "strategy_return"
+  ],
+  "pydantic_contract": "quant_research.contracts.PredictionObservation"
+}

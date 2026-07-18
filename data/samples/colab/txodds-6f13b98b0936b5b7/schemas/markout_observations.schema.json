@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "table": "markout_observations",
+  "required": [
+    "observation_id",
+    "fixture_id",
+    "market_id",
+    "selection_id",
+    "event_time",
+    "available_at",
+    "horizon_seconds",
+    "future_probability",
+    "markout",
+    "status"
+  ]
+}

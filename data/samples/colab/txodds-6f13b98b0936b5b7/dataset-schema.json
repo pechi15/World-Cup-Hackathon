@@ -1,0 +1,112 @@
+{
+  "schema_version": "1.0.0",
+  "format": "JSONL",
+  "tables": {
+    "fixtures": {
+      "required": [
+        "fixture_id",
+        "competition_id",
+        "home_team_id",
+        "away_team_id",
+        "source",
+        "provenance"
+      ]
+    },
+    "markets": {
+      "required": [
+        "fixture_id",
+        "market_id",
+        "market_type",
+        "selections",
+        "settlement_rules",
+        "source",
+        "provenance"
+      ]
+    },
+    "market_events": {
+      "required": [
+        "fixture_id",
+        "market_id",
+        "selection_id",
+        "event_time",
+        "receive_time",
+        "available_at",
+        "decision_time",
+        "market_probability",
+        "source",
+        "provenance"
+      ]
+    },
+    "score_events": {
+      "required": [
+        "score_event_id",
+        "fixture_id",
+        "event_time",
+        "receive_time",
+        "available_at",
+        "source",
+        "provenance"
+      ]
+    },
+    "settlements": {
+      "required": [
+        "fixture_id",
+        "market_id",
+        "selection_id",
+        "payout",
+        "settled_at",
+        "available_at",
+        "source",
+        "provenance"
+      ]
+    },
+    "markout_observations": {
+      "required": [
+        "observation_id",
+        "fixture_id",
+        "market_id",
+        "selection_id",
+        "event_time",
+        "available_at",
+        "horizon_seconds",
+        "future_probability",
+        "markout",
+        "status"
+      ]
+    },
+    "data_quality": {
+      "required": [
+        "flag_id",
+        "scope",
+        "severity",
+        "code",
+        "details"
+      ]
+    },
+    "raw_events": {
+      "required": [
+        "event_id",
+        "event_time",
+        "receive_time",
+        "available_at",
+        "sequence_id",
+        "raw_fields"
+      ]
+    },
+    "prediction_observations": {
+      "required": [
+        "observation_id",
+        "fixture_id",
+        "event_time",
+        "available_at",
+        "decision_time",
+        "target_available_at",
+        "probability",
+        "baseline_probability",
+        "outcome",
+        "strategy_return"
+      ],
+      "pydantic_contract": "quant_research.contracts.PredictionObservation"
+    }
+  }
+}

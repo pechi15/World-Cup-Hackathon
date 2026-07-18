@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "table": "market_events",
+  "required": [
+    "fixture_id",
+    "market_id",
+    "selection_id",
+    "event_time",
+    "receive_time",
+    "available_at",
+    "decision_time",
+    "market_probability",
+    "source",
+    "provenance"
+  ]
+}

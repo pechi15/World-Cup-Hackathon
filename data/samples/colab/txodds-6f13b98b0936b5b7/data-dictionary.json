@@ -1,0 +1,15 @@
+{
+  "timestamp_unit": "RFC3339 UTC with millisecond precision",
+  "probability_unit": "decimal probability in [0,1]",
+  "event_time": "Timestamp assigned by the source event.",
+  "receive_time": "Timestamp the backend received or captured the event.",
+  "available_at": "Earliest timestamp the row was available to research; equal to receive_time for source events.",
+  "decision_time": "Research/runtime decision timestamp; null in source-only market events.",
+  "target_available_at": "Timestamp a future markout or settlement target became observable; null when unavailable.",
+  "market_probability": "Selected StablePrice consensus probability, or one-time de-vigged raw decimal Prices probability.",
+  "stable_price": "TxLINE consensus StablePrice; already de-margined and never de-vigged again.",
+  "prices": "Raw decimal bookmaker odds; converted to implied probabilities and proportionally de-vigged once when StablePrice is absent.",
+  "pct": "Raw TxLINE Pct value preserved for audit; semantics unverified and never selected as probability.",
+  "markout": "future_probability minus market_probability; null when no future event exists at or after the horizon.",
+  "payout": "Settled selection payout in [0,1] under the mapped market settlement rule."
+}

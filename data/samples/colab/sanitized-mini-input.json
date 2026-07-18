@@ -1,0 +1,78 @@
+{
+  "sourceNetwork": "sanitized-replay",
+  "fixture": {
+    "FixtureId": 101,
+    "CompetitionId": 72,
+    "Competition": "Sanitized World Cup Sample",
+    "Participant1Id": 1,
+    "Participant1": "Home XI",
+    "Participant2Id": 2,
+    "Participant2": "Away XI",
+    "Participant1IsHome": true,
+    "StartTime": 1767229200000,
+    "GameState": 1
+  },
+  "updates": [
+    {
+      "FixtureId": 101,
+      "MessageId": "mini-1",
+      "Ts": 1767225600000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": ["Home", "Draw", "Away"],
+      "Prices": [2.0, 4.0, 4.0],
+      "Pct": ["0", "0", "0"]
+    },
+    {
+      "FixtureId": 101,
+      "MessageId": "mini-2",
+      "Ts": 1767225610000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": ["Home", "Draw", "Away"],
+      "Prices": [1.9, 4.1, 4.2],
+      "Pct": ["0", "0", "0"]
+    },
+    {
+      "FixtureId": 101,
+      "MessageId": "mini-3",
+      "Ts": 1767225630000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": ["Home", "Draw", "Away"],
+      "Prices": [1.8, 4.2, 4.5],
+      "Pct": ["0", "0", "0"]
+    },
+    {
+      "FixtureId": 101,
+      "MessageId": "mini-4",
+      "Ts": 1767225660000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": ["Home", "Draw", "Away"],
+      "Prices": [1.7, 4.4, 4.8],
+      "Pct": ["0", "0", "0"]
+    }
+  ],
+  "scoreEvents": [
+    {
+      "FixtureId": 101,
+      "MessageId": "mini-score-final",
+      "Ts": 1767232800000,
+      "receiveTime": "2026-01-01T02:00:01.000Z",
+      "action": "game_finalised",
+      "statusId": 100,
+      "period": 100,
+      "homeScore": 2,
+      "awayScore": 1
+    }
+  ]
+}

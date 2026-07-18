@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0.0",
+  "dataset_id": "txodds-6f13b98b0936b5b7",
+  "dataset_hash": "6f13b98b0936b5b7383a0e8a40ec59df9f5ae6c79ffc81d95138eba1662e8450",
+  "export_git_commit": "73fb4fe45d2fb6815065044c65064f29d61dc117",
+  "export_timestamp": "2026-01-01T03:00:00.000Z",
+  "source_network": "sanitized-replay",
+  "source_uri": "data/samples/colab/sanitized-mini-input.json",
+  "sanitized": true,
+  "supported_markout_horizons_seconds": [
+    10,
+    30,
+    60,
+    300
+  ],
+  "files": [
+    {
+      "path": "data_quality.jsonl",
+      "sha256": "b2a293a3bd1de1b33daf9121801ce4ad7cb14f37c4ac4459f0330c026990af7a",
+      "size_bytes": 230,
+      "rows": 1
+    },
+    {
+      "path": "fixtures.jsonl",
+      "sha256": "0c38c77cab4dafcb8019b3417e015bbffa7273d4664be84c516132e5278ffa0c",
+      "size_bytes": 259,
+      "rows": 1
+    },
+    {
+      "path": "market_events.jsonl",
+      "sha256": "664b60f44e0b140eb0e145bebe80b1e0bd4123829e9e78f4d6f69a07f4a633a2",
+      "size_bytes": 12102,
+      "rows": 12
+    },
+    {
+      "path": "markets.jsonl",
+      "sha256": "362cdddd72b38854a349f590d3755059e0386ae71abd3a73157513fb8f555e47",
+      "size_bytes": 924,
+      "rows": 1
+    },
+    {
+      "path": "markout_observations.jsonl",
+      "sha256": "9f2e0583a97838b70c4a5da5f8f279e1d7fea5bd6f2b5433ffa8b7dd46068f43",
+      "size_bytes": 39094,
+      "rows": 48
+    },
+    {
+      "path": "prediction_observations.jsonl",
+      "sha256": "81376b3c49a300d5345d896cab7814ca437016784699408394cf340e66a54542",
+      "size_bytes": 4296,
+      "rows": 12
+    },
+    {
+      "path": "raw_events.jsonl",
+      "sha256": "20cdb36ea07d485bf3004366554fdf06efd222607ff4d537263f5d8c7cfd2e19",
+      "size_bytes": 1838,
+      "rows": 4
+    },
+    {
+      "path": "score_events.jsonl",
+      "sha256": "8fd5b0db4fb80baaa58157c7f006038a1a866513c65f6f30245bf14d0a7256ee",
+      "size_bytes": 665,
+      "rows": 1
+    },
+    {
+      "path": "settlements.jsonl",
+      "sha256": "9debf74ef46b01a106ddca01d80ecd9e61e1c3b43e7cfac53efaa85f6453587b",
+      "size_bytes": 1197,
+      "rows": 3
+    }
+  ],
+  "research_contract": {
+    "schema_version": "1.0.0",
+    "dataset_id": "txodds-6f13b98b0936b5b7",
+    "data_mode": "SANITIZED_TXODDS",
+    "source_type": "TXODDS_REPLAY",
+    "source_uri": "data/samples/colab/sanitized-mini-input.json",
+    "content_hash": "6f13b98b0936b5b7383a0e8a40ec59df9f5ae6c79ffc81d95138eba1662e8450",
+    "record_count": 12,
+    "fixture_count": 1,
+    "contains_settled_outcomes": true,
+    "sanitized": true,
+    "generator": null
+  }
+}
