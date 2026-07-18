@@ -1,0 +1,226 @@
+{
+  "generatedAt": "2026-07-18T14:55:33.518Z",
+  "apiOrigin": "https://txline-dev.txodds.com",
+  "credentials": {
+    "guestJwt": "<redacted>",
+    "renewedGuestJwt": "<redacted>",
+    "apiToken": "<redacted>",
+    "apiTokenReusedForRenewalProbe": true
+  },
+  "requests": [
+    {
+      "endpoint": "/api/fixtures/snapshot",
+      "ok": true,
+      "status": 200,
+      "contentType": "application/json",
+      "shape": {
+        "type": "array",
+        "length": 8,
+        "firstShape": {
+          "type": "object",
+          "keys": [
+            "Ts",
+            "StartTime",
+            "Competition",
+            "CompetitionId",
+            "FixtureGroupId",
+            "Participant1Id",
+            "Participant1",
+            "Participant2Id",
+            "Participant2",
+            "FixtureId",
+            "Participant1IsHome",
+            "GameState"
+          ],
+          "fields": {
+            "Ts": "number",
+            "StartTime": "number",
+            "Competition": "string",
+            "CompetitionId": "number",
+            "FixtureGroupId": "number",
+            "Participant1Id": "number",
+            "Participant1": "string",
+            "Participant2Id": "number",
+            "Participant2": "string",
+            "FixtureId": "number",
+            "Participant1IsHome": "boolean",
+            "GameState": "number"
+          }
+        }
+      },
+      "count": 8,
+      "firstFixtureId": 18143850
+    },
+    {
+      "endpoint": "/api/fixtures/snapshot?competitionId=72&startEpochDay=20624",
+      "ok": true,
+      "status": 200,
+      "contentType": "application/json",
+      "shape": {
+        "type": "array",
+        "length": 75,
+        "firstShape": {
+          "type": "object",
+          "keys": [
+            "Ts",
+            "StartTime",
+            "Competition",
+            "CompetitionId",
+            "FixtureGroupId",
+            "Participant1Id",
+            "Participant1",
+            "Participant2Id",
+            "Participant2",
+            "FixtureId",
+            "Participant1IsHome"
+          ],
+          "fields": {
+            "Ts": "number",
+            "StartTime": "number",
+            "Competition": "string",
+            "CompetitionId": "number",
+            "FixtureGroupId": "number",
+            "Participant1Id": "number",
+            "Participant1": "string",
+            "Participant2Id": "number",
+            "Participant2": "string",
+            "FixtureId": "number",
+            "Participant1IsHome": "boolean"
+          }
+        }
+      },
+      "count": 75,
+      "firstFixtureId": 17588229
+    },
+    {
+      "endpoint": "/api/odds/snapshot/17588320",
+      "ok": true,
+      "status": 200,
+      "contentType": "application/json",
+      "shape": {
+        "type": "array",
+        "length": 0,
+        "firstShape": null
+      },
+      "count": 0,
+      "firstFixtureId": null
+    },
+    {
+      "endpoint": "/api/odds/snapshot/17588320?asOf=1784386530773",
+      "ok": true,
+      "status": 200,
+      "contentType": "application/json",
+      "shape": {
+        "type": "array",
+        "length": 0,
+        "firstShape": null
+      },
+      "count": 0,
+      "firstFixtureId": null
+    },
+    {
+      "endpoint": "/api/odds/updates/20652/14/0",
+      "ok": true,
+      "status": 200,
+      "contentType": "application/json",
+      "shape": {
+        "type": "array",
+        "length": 48,
+        "firstShape": {
+          "type": "object",
+          "keys": [
+            "FixtureId",
+            "MessageId",
+            "Ts",
+            "Bookmaker",
+            "BookmakerId",
+            "SuperOddsType",
+            "GameState",
+            "InRunning",
+            "MarketParameters",
+            "MarketPeriod",
+            "PriceNames",
+            "Prices",
+            "Pct"
+          ],
+          "fields": {
+            "FixtureId": "number",
+            "MessageId": "string",
+            "Ts": "number",
+            "Bookmaker": "string",
+            "BookmakerId": "number",
+            "SuperOddsType": "string",
+            "GameState": "null",
+            "InRunning": "boolean",
+            "MarketParameters": "string",
+            "MarketPeriod": "string",
+            "PriceNames": {
+              "type": "array",
+              "length": 2,
+              "firstShape": "string"
+            },
+            "Prices": {
+              "type": "array",
+              "length": 2,
+              "firstShape": "number"
+            },
+            "Pct": {
+              "type": "array",
+              "length": 2,
+              "firstShape": "string"
+            }
+          }
+        }
+      },
+      "count": 48,
+      "firstFixtureId": 18257865
+    }
+  ],
+  "renewalProbe": {
+    "endpoint": "/api/fixtures/snapshot?competitionId=72&startEpochDay=20624",
+    "ok": true,
+    "status": 200,
+    "contentType": "application/json",
+    "shape": {
+      "type": "array",
+      "length": 75,
+      "firstShape": {
+        "type": "object",
+        "keys": [
+          "Ts",
+          "StartTime",
+          "Competition",
+          "CompetitionId",
+          "FixtureGroupId",
+          "Participant1Id",
+          "Participant1",
+          "Participant2Id",
+          "Participant2",
+          "FixtureId",
+          "Participant1IsHome"
+        ],
+        "fields": {
+          "Ts": "number",
+          "StartTime": "number",
+          "Competition": "string",
+          "CompetitionId": "number",
+          "FixtureGroupId": "number",
+          "Participant1Id": "number",
+          "Participant1": "string",
+          "Participant2Id": "number",
+          "Participant2": "string",
+          "FixtureId": "number",
+          "Participant1IsHome": "boolean"
+        }
+      }
+    },
+    "count": 75,
+    "firstFixtureId": 17588229
+  },
+  "sse": {
+    "endpoint": "/api/odds/stream",
+    "opened": true,
+    "status": 200,
+    "contentType": "text/event-stream"
+  }
+}
