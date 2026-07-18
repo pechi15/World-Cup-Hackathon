@@ -1,0 +1,425 @@
+{
+  "data_mode": "REPLAY",
+  "label": "SANITIZED_REPLAY_NOT_LIVE_TXODDS",
+  "notes": "Deterministic sanitized odds path for offline demo. Includes an information shock around message 8.",
+  "fixture": {
+    "FixtureId": 18257865,
+    "CompetitionId": 72,
+    "Competition": "World Cup Test",
+    "Participant1Id": 101,
+    "Participant1": "Home XI",
+    "Participant2Id": 202,
+    "Participant2": "Away XI",
+    "Participant1IsHome": true,
+    "StartTime": 1784372400000,
+    "Ts": 1784376000000,
+    "GameState": 1
+  },
+  "updates": [
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-0",
+      "Ts": 1784376000000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        2.1,
+        3.4,
+        3.5
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-1",
+      "Ts": 1784376015000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        2.08,
+        3.4,
+        3.55
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-2",
+      "Ts": 1784376030000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        2.05,
+        3.45,
+        3.6
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-3",
+      "Ts": 1784376045000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        2,
+        3.5,
+        3.7
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-4",
+      "Ts": 1784376060000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        1.95,
+        3.55,
+        3.8
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-5",
+      "Ts": 1784376075000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        1.9,
+        3.6,
+        3.9
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-6",
+      "Ts": 1784376090000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        1.85,
+        3.6,
+        4
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-7",
+      "Ts": 1784376105000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        1.8,
+        3.7,
+        4.1
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-8",
+      "Ts": 1784376120000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        1.4,
+        4.5,
+        7
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-9",
+      "Ts": 1784376135000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        1.45,
+        4.4,
+        6.5
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-10",
+      "Ts": 1784376150000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        1.5,
+        4.2,
+        6
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-11",
+      "Ts": 1784376165000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        1.55,
+        4,
+        5.5
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-12",
+      "Ts": 1784376180000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        1.6,
+        3.9,
+        5.2
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-13",
+      "Ts": 1784376195000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        1.65,
+        3.8,
+        5
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "FixtureId": 18257865,
+      "MessageId": "msg-14",
+      "Ts": 1784376210000,
+      "Bookmaker": "SanitizedBook",
+      "BookmakerId": 1,
+      "SuperOddsType": "MATCH_RESULT_1X2",
+      "GameState": null,
+      "InRunning": true,
+      "MarketParameters": "",
+      "MarketPeriod": "FULL_MATCH",
+      "PriceNames": [
+        "Home",
+        "Draw",
+        "Away"
+      ],
+      "Prices": [
+        1.7,
+        3.7,
+        4.8
+      ],
+      "Pct": [
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  ]
+}

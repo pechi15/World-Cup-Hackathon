@@ -1,0 +1,113 @@
+# Strategy / model registry (research only — not live funds)
+# Status values: RESEARCH_ONLY | PROMOTE_TO_REPLAY | PROMOTE_TO_PAPER | APPROVED_FOR_INTEGRATION | REJECTED
+# Never use APPROVED_FOR_LIVE_FUNDS.
+
+version: 1
+updated: "2026-07-18"
+notes: >
+  Synthetic and sanitized replay results are pipeline validation only.
+  The ~48 TxODDS historical updates are integration data, not alpha evidence.
+  TxLINE StablePrice is already de-margined — do not double de-vig.
+
+strategies:
+  - id: MARKET_BASELINE
+    type: benchmark
+    hypothesis: De-vigged (or StablePrice) consensus is a proper baseline forecast
+    academic_refs: []
+    implementation: packages/theo/src/market-baseline.ts
+    status: RESEARCH_ONLY
+    proprietary_alpha: false
+    reason_codes_required: [BENCHMARK_ONLY, NOT_PROPRIETARY_ALPHA]
+
+  - id: STATE_SPACE_THEO
+    type: theo
+    hypothesis: Latent fair log-odds with noisy market observations (Kalman 1960)
+    academic_refs: [kalman1960filtering]
+    implementation: packages/theo/src/state-space.ts
+    status: RESEARCH_ONLY
+    milestone: 1
+    proprietary_alpha: false
+    model_version: STATE_SPACE_LOG_ODDS/1.0.0
+    exposure_modes: [REPLAY, RESEARCH]
+    default_in_production: false
+    tests: [tests/state-space-theo.test.ts, tests/replay-theo-loop.test.ts]
+    empirical_evidence_missing: >
+      No settled outcomes in sanitized replay; Q/R calibration and chronological
+      out-of-sample scoring on substantial TxODDS history remain outstanding.
+
+  - id: INNOVATION_RESIDUAL
+    type: diagnostic
+    hypothesis: Standardized innovations identify observations surprising under configured Q/R
+    academic_refs: [kalman1960filtering, glosten1985bidask]
+    implementation: packages/theo/src/state-space.ts
+    status: RESEARCH_ONLY
+    milestone: 1
+    proprietary_alpha: false
+    trading_residual_enabled: false
+    notes: Innovations are emitted as diagnostics and are not added to posterior logits.
+
+  - id: DIXON_COLES_PRIOR
+    type: theo
+    hypothesis: Attack/defence strengths + low-score dependence explain score markets
+    academic_refs: [dixon1997football]
+    implementation: packages/theo/src/dixon-coles.ts
+    status: REJECTED
+    milestone: 2
+    proprietary_alpha: false
+    blocked_reason: Insufficient historical match outcomes in current stores
+
+  - id: RESIDUAL_LOGISTIC
+    type: residual
+    hypothesis: Regularized correction to market logits improves proper scores OOS
+    academic_refs: [gneiting2007proper, brier1950verification]
+    implementation: packages/theo/src/residual-logistic.ts
+    status: REJECTED
+    milestone: 3
+    blocked_reason: Need chronological TxODDS/replay volume beyond integration sample
+
+  - id: MAKER_MARKOUT_AS
+    type: execution_research
+    hypothesis: Adverse selection after fills informs width and suspension
+    academic_refs: [glosten1985bidask, avellaneda2008hft]
+    implementation: packages/evaluation/src/markout.ts
+    status: RESEARCH_ONLY
+    milestone: 4
+
+  - id: FRACTIONAL_KELLY_DIRECTIONAL
+    type: sizing
+    hypothesis: Fractional Kelly with hard caps sizes directional edge safely
+    academic_refs: [kelly1956information]
+    implementation: packages/strategies/src/index.ts
+    status: RESEARCH_ONLY
+    default_fraction: 0.10
+    full_kelly_default: false
+
+  - id: REGIME_HMM
+    type: regime
+    hypothesis: Latent regimes change residual weights and quote policy
+    academic_refs: [hamilton1989regime]
+    implementation: planned
+    status: REJECTED
+    milestone: 5
+    blocked_reason: Requires richer time series than available
+
+  - id: LEAD_LAG_DISCOVERY
+    type: microstructure
+    hypothesis: Provider lead–lag / information shares
+    academic_refs: [hasbrouck1995discovery]
+    implementation: planned
+    status: REJECTED
+    milestone: 5
+    blocked_reason: Multi-provider observability not yet confirmed
+
+promotion_gates:
+  require_proper_scores: true
+  require_chronological_oos: true
+  forbid_synthetic_alpha_claims: true
+  require_reality_check_or_spa_before_superiority_claim: true
+  academic_refs_for_snooping: [white2000reality, hansen2005spa]
+  agents_may_not_modify:
+    - hard_risk_limits
+    - wallet_permissions
+    - train_test_splits
+    - promotion_gate_code

@@ -1,35 +1,30 @@
 # Theo Integration
 
-There is no approved theo model and no active TxODDS connection yet.
+## Runtime modes
 
-Runtime behavior:
+1. **NullTheoProvider** (production default; unset or unsupported `THEO_MODE`):
+   `AWAITING_TXODDS_API`, null probabilities.
+2. **PipelineTheoProvider** (explicit `THEO_MODE=REPLAY` or
+   `THEO_MODE=RESEARCH` with replay loaded): normalized market observation →
+   unchanged MarketBaseline → StateSpace latent additive-log-odds posterior.
 
-```json
-{
-  "probabilities": null,
-  "uncertainty": null,
-  "status": "AWAITING_TXODDS_API",
-  "modelVersion": null,
-  "source": null,
-  "reasonCodes": ["TXODDS_API_NOT_CONNECTED"]
-}
-```
-
-The frontend should display:
-
-```text
-Awaiting TxODDS API
-```
-
-It must not display `0%`, `50%`, or a market midpoint as proprietary theo.
+Frontend must never display market mid as proprietary theo. Baseline reason codes include `BENCHMARK_ONLY`.
+State-space outputs are labeled `RESEARCH_ONLY` and `NOT_PROVEN_ALPHA`.
+Innovations are diagnostics; Milestone 1 does not add an innovation residual to
+posterior logits.
 
 ## Provider Interfaces
 
 - `TheoProvider`
-- `TxoddsTheoProvider`
-- `HistoricalTheoProvider`
-- `LearnedResidualTheoProvider`
-- `EnsembleTheoProvider`
 - `NullTheoProvider`
+- `MarketBaselineTheoProvider`
+- `StateSpaceTheoProvider`
+- `PipelineTheoProvider`
+- `TxoddsTheoProvider` (stub for live)
+- `HistoricalTheoProvider` (stub)
+- `LearnedResidualTheoProvider` (stub / future logistic-GBM)
+- `EnsembleTheoProvider` (stub)
 
-Future TxODDS-backed research will plug into `TheoProvider.getTheo(input)` and return probabilities, uncertainty, model version, provenance, and reason codes.
+## Replay demo
+
+See `docs/demo-script.md`. Autonomous loop: `packages/agent` + `/api/replay/*` + `/api/demo/snapshot`.
