@@ -67,6 +67,17 @@ code. `SANITIZED_TXODDS` accepts the repository replay shape but fails closed
 because the sample has no settled outcomes. `REAL_HISTORICAL` requires an
 external JSON array of `PredictionObservation` records and an expected SHA-256.
 
+Repository entry points used by the runner:
+
+- training: `quant_research.colab_runtime.train_challenger`
+- evaluation: `quant_research.validation.walk_forward_validation` and
+  `quant_research.backtest.latency_aware_backtest`
+- critic: `quant_research.critic.IndependentCriticAgent.review`
+- promotion: `quant_research.promotion.DeterministicPromotionGate.decide`
+
+`quant_research.colab_runtime.run_governed_experiment` is the only orchestration
+entry point called by `colab/run_experiment.py`.
+
 ## Optional Perplexity context
 
 Perplexity remains disabled unless both conditions hold:

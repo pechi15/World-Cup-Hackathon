@@ -14,8 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pyarrow as pa  # type: ignore[import-untyped]
-import pyarrow.parquet as pq  # type: ignore[import-untyped]
+import pyarrow as pa  # type: ignore[import-not-found,import-untyped]
+import pyarrow.parquet as pq  # type: ignore[import-not-found,import-untyped]
 import yaml  # type: ignore[import-untyped]
 from jsonschema import validate as validate_json_schema  # type: ignore[import-untyped]
 

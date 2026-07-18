@@ -88,11 +88,12 @@ into production.
 
 Agent text generation uses the provider-neutral `StructuredModelProvider`
 protocol. `PerplexityAgentProvider` calls `POST /v1/agent` with a strict
-Pydantic-derived JSON schema. It is disabled unless `PERPLEXITY_API_KEY` is
-present:
+Pydantic-derived JSON schema. It is disabled unless the key exists and context
+is explicitly enabled:
 
 ```powershell
 $env:PERPLEXITY_API_KEY = "..."
+$env:ENABLE_PERPLEXITY_CONTEXT = "true"
 $env:PERPLEXITY_MODEL = "openai/gpt-5.6-sol" # optional
 ```
 
@@ -102,15 +103,17 @@ the live controller.
 
 `generate_colab_job_spec` produces a reproducible, secret-free spec whose output
 must end in `/challengers`. It does not submit a job or deploy an artifact.
+The authoritative online runner is `notebooks/colab_runner.ipynb`; see
+`colab/README.md` for its exact startup cells and artifact contract.
 
 ## Install and verify
 
 ```powershell
 Set-Location E:\Hackathons\World-Cup-quant\research
-py -m pip install -e ".[dev]"
-py -m pytest
-py -m ruff check quant_research tests
-py -m mypy quant_research
+uv sync --extra dev
+uv run pytest
+uv run ruff check .
+uv run mypy quant_research
 ```
 
 Run the single synthetic lifecycle example from this directory:

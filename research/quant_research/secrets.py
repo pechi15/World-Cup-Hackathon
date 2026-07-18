@@ -15,7 +15,7 @@ class PerplexityConfiguration:
 
 def _colab_secret_reader() -> Callable[[str], str | None] | None:
     try:
-        from google.colab import userdata  # type: ignore[import-not-found]
+        from google.colab import userdata  # type: ignore[import-not-found,import-untyped]
     except ImportError:
         return None
 

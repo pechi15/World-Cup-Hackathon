@@ -9,6 +9,11 @@
   "feature_manifest": "research/configs/feature-manifest.example.json",
   "model_config": "research/configs/model-config.example.yaml",
   "backtest_config": "research/configs/backtest-config.example.yaml",
+  "academic_methodology": [
+    "docs/academic-quant-methodology.md",
+    "docs/model-validation-and-risk.md",
+    "research/references.bib"
+  ],
   "sanitized_samples": [
     "data/samples/txodds/sanitized/replay-fixture.json",
     "data/samples/historical/test-only/dixon-coles-fixtures.json"
