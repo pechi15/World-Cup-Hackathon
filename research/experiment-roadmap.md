@@ -38,6 +38,14 @@ unverified, and command-runner verification must be green before promotion.
 - Requires historical match results at usable N
 - Acceptance: proper scores vs baseline on held-out fixtures (not sanitized-only)
 
+Implementation status (2026-07-18): research code, deterministic optimizer,
+historical fixture schema/audit, connected-schedule and time-weighted
+sufficiency gates, coherent score-derived markets, research-only provider, and
+chronological expanding-window evaluation infrastructure are implemented.
+`data/samples/historical/test-only/` is test-only and is not empirical evidence.
+The repository currently has no sufficient settled historical dataset, so
+`DIXON_COLES_PRIOR` remains `REJECTED` / `INSUFFICIENT_REAL_DATA`.
+
 ### Milestone 3 — Regularized market-residual logistic
 
 - `softmax(market_logits + Xβ)`

@@ -117,4 +117,5 @@ export function buildPerformanceSnapshot(portfolio: Portfolio): PerformanceSnaps
 
 export * from "./audit.js";
 export * from "./markout.js";
+export * from "./dixon-coles-validation.js";
 

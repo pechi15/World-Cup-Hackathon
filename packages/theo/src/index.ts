@@ -27,3 +27,7 @@ export * from "./devig.js";
 export * from "./market-baseline.js";
 export * from "./state-space.js";
 export * from "./pipeline.js";
+export * from "./historical-data.js";
+export * from "./dixon-coles.js";
+export * from "./score-markets.js";
+export * from "./historical-score-prior.js";

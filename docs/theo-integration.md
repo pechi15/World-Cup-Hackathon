@@ -22,9 +22,20 @@ posterior logits.
 - `PipelineTheoProvider`
 - `TxoddsTheoProvider` (stub for live)
 - `HistoricalTheoProvider` (stub)
+- `HistoricalScorePriorProvider` (Dixon–Coles independent prior; explicit
+  `RESEARCH`/`REPLAY`, never production default)
 - `LearnedResidualTheoProvider` (stub / future logistic-GBM)
 - `EnsembleTheoProvider` (stub)
 
 ## Replay demo
 
 See `docs/demo-script.md`. Autonomous loop: `packages/agent` + `/api/replay/*` + `/api/demo/snapshot`.
+
+## Historical prior boundary
+
+Milestone 2 adds `HistoricalScorePriorProvider` without wiring it into the API,
+agent, quote engine, or production default. It emits
+`HISTORICAL_DIXON_COLES` provenance and `RESEARCH_ONLY` status. A future
+historical-residual combination with the Milestone 1 market filter is documented
+in `docs/academic-quant-methodology.md`; no blending or directional edge is
+implemented in Milestone 2.

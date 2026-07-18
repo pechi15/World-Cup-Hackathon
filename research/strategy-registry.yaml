@@ -54,7 +54,28 @@ strategies:
     status: REJECTED
     milestone: 2
     proprietary_alpha: false
-    blocked_reason: Insufficient historical match outcomes in current stores
+    model_version: DIXON_COLES/1.0.0
+    exposure_modes: [RESEARCH, REPLAY]
+    default_in_production: false
+    provenance: HISTORICAL_DIXON_COLES
+    research_status: RESEARCH_ONLY
+    tests: [tests/dixon-coles.test.ts]
+    blocked_reason: >
+      Implementation complete, but no sufficient connected settled historical
+      international-fixture dataset currently exists in the repository.
+    data_gates:
+      require_settled_scores: true
+      require_connected_fixture_graph: true
+      require_training_cutoff: true
+      require_availability_time: true
+      require_configured_raw_and_effective_sample_minima: true
+    validation:
+      split: chronological_expanding_window_fixture_grouped
+      primary_metrics: [one_x_two_log_loss, brier, ranked_probability_score, calibration, scoreline_log_likelihood]
+      baselines: [unconditional_score_frequency, independent_poisson, market_when_compatible]
+    empirical_evidence_missing: >
+      No real-data fit, out-of-sample calibration, fixture-level uncertainty
+      interval, compatible market-price comparison, or squad-change robustness evidence.
 
   - id: RESIDUAL_LOGISTIC
     type: residual

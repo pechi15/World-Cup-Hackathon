@@ -73,6 +73,8 @@ Kelly (1956) sizing is extremely sensitive to probability error. Default researc
 | State-space Milestone 1 | Implemented for `REPLAY` / `RESEARCH`; empirical calibration pending |
 | Double-de-vig test | Implemented for StablePrice-like already de-margined input |
 | Proper-score comparison | Implemented; current sanitized replay has no outcomes (`N=0`) |
-| Dixon–Coles / logistic residual | Not started |
+| Dixon–Coles Milestone 2 | Research implementation complete; real-data gate `INSUFFICIENT_REAL_DATA` |
+| Dixon–Coles validation | Chronological expanding-window infrastructure; no empirical run available |
+| Logistic residual | Not started (Milestone 3) |
 | SPA / Reality Check | Not started |
 | Live TxLINE harvest | Scripts only |
