@@ -132,6 +132,8 @@ describe("maker-only lockouts and conservative paper execution", () => {
     expect(audit.estimatedEdge).toBeNull();
     expect(audit.directionalAction).toBe("NO_ACTION");
     expect(audit.kellySize).toBeNull();
+    expect(audit.quoteWidth).toBeGreaterThan(0);
+    expect(audit.inventoryLean).toBe(0);
     expect(instance.status().trading).toMatchObject({
       maker: "PAPER_ENABLED",
       directional: "DISABLED_NON_INDEPENDENT_THEO",
@@ -165,6 +167,19 @@ describe("maker-only lockouts and conservative paper execution", () => {
     expect(instance.fills.length).toBeGreaterThan(0);
     expect(instance.fills.every((fill) => fill.executionStyle === "MAKER")).toBe(true);
     expect(instance.fills.every((fill) => Date.parse(fill.filledAt) > Date.parse(first.observation.receiveTime))).toBe(true);
+  });
+
+  it("suspends before evaluating fills on an information-shock observation", async () => {
+    const base = Date.parse("2026-01-01T00:00:00.000Z");
+    const first = observation(update("1", base), base + 10);
+    const shock = observation(update("2", base + 1_000, [0.01, 0.99]), base + 1_010);
+    const instance = runtime({ executionLatencyMs: 1, quoteExpiryMs: 5_000, informationShockZ: 0.5 });
+    await instance.onObservation(first.market, first.observation);
+    const audit = await instance.onObservation(shock.market, shock.observation);
+    expect(audit.reasonCodes).toContain("INFORMATION_SHOCK_QUOTE_SUSPENSION");
+    expect(audit.fillIds).toHaveLength(0);
+    expect(instance.fills).toHaveLength(0);
+    expect(instance.activeQuotes()).toHaveLength(0);
   });
 
   it("suspends stale observations and cancels on sequence gaps or connection loss", async () => {

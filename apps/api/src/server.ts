@@ -71,6 +71,7 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
     if (product.mode === "replay") product.demo.tick();
     return send(req, res, 200, product.state());
   }
+  if (req.method === "GET" && path === "/api/demo/replays") return send(req, res, 200, product.replays());
   if (req.method === "GET" && path === "/api/demo/audit") return send(req, res, 200, product.state().audit);
   if (req.method === "GET" && path === "/api/demo/performance") return send(req, res, 200, product.state().performance);
   if (req.method === "POST" && path.startsWith("/api/demo/")) {
@@ -82,6 +83,15 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
     else if (path === "/api/demo/reset") product.demo.reset();
     else if (path === "/api/demo/step") product.demo.step();
     else if (path === "/api/demo/inject-shock") product.demo.injectShock();
+    else if (path === "/api/demo/replay") {
+      const body = await readJson(req) as { replayId?: string };
+      try {
+        return send(req, res, 200, product.selectReplay(body.replayId ?? ""));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "UNKNOWN_REPLAY";
+        return send(req, res, message === "RECORDED_REPLAY_UNAVAILABLE" ? 409 : 400, { error: message });
+      }
+    }
     else if (path === "/api/demo/speed") {
       const body = await readJson(req) as { speed?: number };
       product.demo.setSpeed(Number(body.speed));

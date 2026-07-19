@@ -4,7 +4,7 @@ This repository supports exactly two backend modes. Neither mode can submit a wa
 
 ## Service 1: guaranteed replay demo
 
-Create a Railway service from branch `codex/market-maker-mvp`. Use the repository Dockerfile and set:
+Create a Railway service from branch `cursor/final-integration`. Use the repository Dockerfile and set:
 
 ```dotenv
 NODE_ENV=production
@@ -18,7 +18,7 @@ ENABLE_TXODDS_ACTIVATION=false
 ALLOWED_ORIGINS=https://<your-vercel-domain>
 ```
 
-Do not set TxODDS credentials on the replay service. Deploy, then verify:
+Do not set TxODDS credentials on the replay service. The built-in replay remains the default. The committed sanitized historical replay is selectable through `/api/demo/replays`; to use a different sanitized file, set `REPLAY_FILE` to its container-relative path. Deploy, then verify:
 
 ```text
 GET https://<replay-service>/health
@@ -26,13 +26,14 @@ GET https://<replay-service>/ready
 GET https://<replay-service>/api/theo/status
 GET https://<replay-service>/api/trading/status
 GET https://<replay-service>/api/demo/state
+GET https://<replay-service>/api/demo/replays
 ```
 
 `/ready` must return 200 with `ready: true`. Pricing must be `AVAILABLE_BENCHMARK`; maker status must be `PAPER_ENABLED`; directional, Kelly, wallet operations, activation, and real execution must be disabled.
 
 ## Service 2: live TxODDS read-only paper maker
 
-Create a second Railway service/environment from the same branch. Keep the token in the Railway backend service variables, not shared variables unless every consuming service is trusted to receive it.
+Create a second Railway service/environment from branch `cursor/final-integration`. Keep the token in the Railway backend service variables, not shared variables unless every consuming service is trusted to receive it.
 
 ```dotenv
 NODE_ENV=production
@@ -73,9 +74,22 @@ GET https://<live-service>/api/audit
 
 The live service is ready only after TxODDS reports `CONNECTED`. A disconnected feed must leave pricing unavailable and quotes empty. If no active fixture or eligible future price crossing exists, zero fills is the correct result.
 
+## Kelly and directional lockout
+
+The fractional-Kelly utility is implemented and tested but cannot be enabled while `THEO_MODE=market_baseline`. Runtime status must remain:
+
+```text
+kellyImplemented=true
+kellyEnabled=false
+kellySize=null
+directionalAction=NO_ACTION
+```
+
+Required reason codes are `INDEPENDENT_THEO_UNAVAILABLE`, `MARKET_BASELINE_IS_NOT_ALPHA`, and `KELLY_DISABLED`. Setting `ENABLE_KELLY=true` or `ENABLE_DIRECTIONAL_TRADING=true` makes startup configuration invalid; it does not override the lockout.
+
 ## Vercel frontend
 
-Deploy the same branch with the repository `vercel.json`. The only runtime variable the frontend receives is:
+Deploy branch `cursor/final-integration` with the repository `vercel.json`. Set the project root directory to the repository root. The only runtime variable the frontend receives is:
 
 ```dotenv
 VITE_API_BASE_URL=https://<one-railway-backend>

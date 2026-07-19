@@ -20,6 +20,22 @@ type SelectionState = {
   takerQuantity: number;
 };
 
+export type DemoReplaySelection = {
+  marketId: string;
+  market: string;
+  selectionId: string;
+  selection: string;
+  probability: number;
+};
+
+export type DemoReplayInput = {
+  replayType: "RECORDED_TXODDS";
+  fixtureId: string;
+  fixtureLabel: string;
+  events: DemoReplayEvent[];
+  selections: DemoReplaySelection[];
+};
+
 type RestingReplayQuote = {
   bid: number;
   ask: number;
@@ -29,8 +45,8 @@ type RestingReplayQuote = {
   expiresAtIndex: number;
 };
 
-const fixtureLabel = "Atlas FC vs Boreal United";
-const fixtureId = "demo-final-001";
+const defaultFixtureLabel = "Atlas FC vs Boreal United";
+const defaultFixtureId = "demo-final-001";
 const buildVersion = process.env.npm_package_version ?? "0.1.0";
 
 export class DemoReplayEngine {
@@ -45,17 +61,29 @@ export class DemoReplayEngine {
   private shockInjected = false;
   private readonly theoProvider = new BenchmarkStateSpaceTheoProvider();
   private readonly restingQuotes = new Map<string, RestingReplayQuote>();
+  private readonly initialSelections: SelectionState[];
+  private readonly fixtureLabel: string;
+  private readonly fixtureId: string;
+  private readonly replayType: "BUILT_IN_DETERMINISTIC" | "RECORDED_TXODDS";
 
-  constructor(private readonly dataMode: "synthetic" | "replay" | "txline" = readDataMode(), private readonly demoMode = process.env.DEMO_MODE !== "false") {
-    this.events = createReplayEvents();
-    this.selections = createSelectionState();
+  constructor(
+    private readonly dataMode: "synthetic" | "replay" | "txline" = readDataMode(),
+    private readonly demoMode = process.env.DEMO_MODE !== "false",
+    replay?: DemoReplayInput,
+  ) {
+    this.fixtureId = replay?.fixtureId ?? defaultFixtureId;
+    this.fixtureLabel = replay?.fixtureLabel ?? defaultFixtureLabel;
+    this.replayType = replay ? "RECORDED_TXODDS" : "BUILT_IN_DETERMINISTIC";
+    this.events = replay?.events.length ? replay.events : createReplayEvents(this.fixtureId);
+    this.initialSelections = replay?.selections.length ? replay.selections.map(toSelectionState) : createSelectionState();
+    this.selections = cloneSelections(this.initialSelections);
   }
 
   reset() {
     this.status = "READY";
     this.currentIndex = 0;
     this.speed = 1;
-    this.selections = createSelectionState();
+    this.selections = cloneSelections(this.initialSelections);
     this.chart = [];
     this.audit = [];
     this.fills = [];
@@ -85,19 +113,21 @@ export class DemoReplayEngine {
 
   injectShock() {
     if (this.shockInjected) return;
+    const target = this.selections[0];
+    if (!target) return;
     this.shockInjected = true;
     this.applyEvent({
       eventId: "manual-info-shock",
       index: this.currentIndex,
       replayTimeMs: this.currentIndex * 1000,
-      fixtureId,
+      fixtureId: this.fixtureId,
       eventType: "INFO_SHOCK",
-      marketId: "demo-three-way",
-      selectionId: "home",
-      marketProbability: 0.71,
+      marketId: target.marketId,
+      selectionId: target.selectionId,
+      marketProbability: clamp(target.probability + 0.12, 0.02, 0.98),
       priceImpact: 0.12,
       description: "Manual information shock injected by demo operator",
-      provenance: { source: "SYNTHETIC" },
+      provenance: { source: "REPLAY" },
     });
   }
 
@@ -128,7 +158,11 @@ export class DemoReplayEngine {
     return {
       demoMode: this.demoMode,
       dataMode: this.dataMode,
-      dataSource: this.dataMode === "txline" ? "TXODDS_LIVE_READ_ONLY" : "SANITIZED_DETERMINISTIC_REPLAY",
+      dataSource: this.dataMode === "txline"
+        ? "TXODDS_LIVE_READ_ONLY"
+        : this.replayType === "RECORDED_TXODDS"
+          ? "RECORDED_TXODDS_HISTORICAL_REPLAY"
+          : "SANITIZED_DETERMINISTIC_REPLAY",
       replayStatus: this.status,
       backendStatus: "CONNECTED",
       theoProvider: "TXODDS_MARKET_BASELINE",
@@ -303,7 +337,8 @@ export class DemoReplayEngine {
     return this.selections.map((selection) => {
       const theo = selection.theo;
       const edge = null;
-      const suspended = this.status === "COMPLETE" ? false : (this.currentIndex >= 70 && this.currentIndex <= 78) || Math.abs(selection.standardizedInnovation ?? 0) >= 6;
+      const scriptedSuspension = this.replayType === "BUILT_IN_DETERMINISTIC" && this.currentIndex >= 70 && this.currentIndex <= 78;
+      const suspended = this.status === "COMPLETE" ? false : scriptedSuspension || Math.abs(selection.standardizedInnovation ?? 0) >= 6;
       const widthBase = 0.012
         + (selection.uncertainty ?? 0.04) * 0.35
         + selection.volatility * 0.08
@@ -315,7 +350,7 @@ export class DemoReplayEngine {
       const directionalLean = 0;
       const center = theo === null ? null : clamp(theo + inventoryLean, 0.02, 0.98);
       return {
-        fixture: fixtureLabel,
+        fixture: this.fixtureLabel,
         marketId: selection.marketId,
         market: selection.market,
         selectionId: selection.selectionId,
@@ -441,7 +476,7 @@ export function createDemoMarkets(): MarketDefinition[] {
   return [
     {
       marketId: "demo-three-way",
-      fixtureId,
+      fixtureId: defaultFixtureId,
       competitionId: "demo-world-cup",
       marketType: "THREE_WAY_MATCH_RESULT",
       title: "Atlas FC vs Boreal United - Full-time result",
@@ -468,7 +503,28 @@ function createSelectionState(): SelectionState[] {
   ];
 }
 
-function createReplayEvents(): DemoReplayEvent[] {
+function toSelectionState(selection: DemoReplaySelection): SelectionState {
+  return {
+    ...selection,
+    theo: null,
+    uncertainty: null,
+    innovation: null,
+    standardizedInnovation: null,
+    volatility: 0,
+    inventory: 0,
+    avgEntry: null,
+    realizedPnl: 0,
+    fees: 0,
+    makerQuantity: 0,
+    takerQuantity: 0,
+  };
+}
+
+function cloneSelections(selections: SelectionState[]): SelectionState[] {
+  return selections.map((selection) => ({ ...selection }));
+}
+
+function createReplayEvents(targetFixtureId = defaultFixtureId): DemoReplayEvent[] {
   const events: DemoReplayEvent[] = [];
   let home = 0.43;
   let over = 0.48;
@@ -494,7 +550,7 @@ function createReplayEvents(): DemoReplayEvent[] {
       eventId: `event-${String(i).padStart(3, "0")}`,
       index: i,
       replayTimeMs: i * 1000,
-      fixtureId,
+      fixtureId: targetFixtureId,
       eventType,
       marketId,
       selectionId,

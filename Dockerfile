@@ -19,6 +19,6 @@ COPY --from=build /app/package*.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps ./apps
 COPY --from=build /app/packages ./packages
-COPY --from=build /app/data/samples/demo ./data/samples/demo
+COPY --from=build /app/data/samples ./data/samples
 EXPOSE 8787
 CMD ["npm", "run", "start"]

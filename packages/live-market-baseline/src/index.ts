@@ -39,6 +39,8 @@ export type MarketBaselineAudit = {
   innovation: number | null;
   standardizedInnovation: number | null;
   quoteIds: string[];
+  quoteWidth: number | null;
+  inventoryLean: number;
   fillIds: string[];
   estimatedEdge: null;
   directionalAction: "NO_ACTION";
@@ -251,7 +253,6 @@ export class LiveMarketBaselineRuntime {
       return this.appendAudit(observation, [], [], reasons);
     }
 
-    const fillIds = this.fillCrossedQuotes(observation);
     const diagnostics = observation.probabilities.map((probability, index) => {
       const key = `${market.marketId}|${observation.selectionIds[index] ?? index}`;
       const filter = this.filters.get(key) ?? new MarketConsensusFilter();
@@ -269,9 +270,10 @@ export class LiveMarketBaselineRuntime {
     if (innovationZ >= this.config.informationShockZ) {
       this.cancelMarket(market.marketId, observation.receiveTime, "INFORMATION_SHOCK");
       reasons.push("INFORMATION_SHOCK_QUOTE_SUSPENSION");
-      return this.appendAudit(observation, [], fillIds, reasons);
+      return this.appendAudit(observation, [], [], reasons);
     }
 
+    const fillIds = this.fillCrossedQuotes(observation);
     this.cancelMarket(market.marketId, observation.receiveTime, "QUOTE_REPLACED");
     this.provider.ingestObservation(observation);
     const rawTheo = await this.provider.getTheo({ market, asOf: observation.receiveTime });
@@ -338,11 +340,14 @@ export class LiveMarketBaselineRuntime {
       provenance: { source: "TXODDS" as const },
     }));
     this.portfolio = markPortfolio(this.portfolio, prices);
-    return this.appendAudit(observation, quotes.map((quote) => quote.quoteId), fillIds, [...reasons, ...theo.reasonCodes]);
+    return this.appendAudit(observation, quotes, fillIds, [...reasons, ...theo.reasonCodes]);
   }
 
-  private appendAudit(observation: NormalizedMarketObservation, quoteIds: string[], fillIds: string[], reasonCodes: string[]): MarketBaselineAudit {
+  private appendAudit(observation: NormalizedMarketObservation, quotes: Quote[], fillIds: string[], reasonCodes: string[]): MarketBaselineAudit {
     const filter = this.filterAudit.get(observation.marketId);
+    const quoteWidth = quotes.find((quote) => quote.width !== null)?.width ?? null;
+    const inventoryLean = quotes.reduce((largest, quote) =>
+      Math.abs(quote.inventoryLean) > Math.abs(largest) ? quote.inventoryLean : largest, 0);
     const event: MarketBaselineAudit = {
       eventId: observation.observationId,
       eventTime: observation.eventTime,
@@ -357,7 +362,9 @@ export class LiveMarketBaselineRuntime {
       uncertainty: filter?.uncertainty ?? null,
       innovation: filter?.innovation ?? null,
       standardizedInnovation: filter?.standardizedInnovation ?? null,
-      quoteIds,
+      quoteIds: quotes.map((quote) => quote.quoteId),
+      quoteWidth,
+      inventoryLean,
       fillIds,
       estimatedEdge: null,
       directionalAction: "NO_ACTION",

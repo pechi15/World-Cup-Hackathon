@@ -1,14 +1,18 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { defaultRiskLimits } from "./sample-data.js";
-import type { DemoAuditEvent, DemoMarketRow, DemoState, MarketDefinition } from "../../../packages/contracts/src/index.js";
-import { DemoReplayEngine } from "../../../packages/demo/src/engine.js";
+import type { DemoAuditEvent, DemoMarketRow, DemoReplayEvent, DemoState, MarketDefinition } from "../../../packages/contracts/src/index.js";
+import { DemoReplayEngine, type DemoReplayInput } from "../../../packages/demo/src/engine.js";
 import {
   invalidConfigStatus,
   mapOddsUpdateToMarket,
   resolveDataRuntimeConfig,
+  selectMarketProbabilities,
   toNormalizedMarketObservation,
   TxlineReadOnlyAdapter,
   type DataRuntimeConfig,
   type NormalizedEvent,
+  type TxlineOddsUpdate,
 } from "../../../packages/market-data/src/index.js";
 import {
   assertMarketBaselineStartupSafe,
@@ -19,9 +23,11 @@ import {
 export class ProductRuntime {
   readonly dataConfig: DataRuntimeConfig;
   readonly baselineConfig;
-  readonly demo: DemoReplayEngine;
+  demo: DemoReplayEngine;
   readonly live: LiveMarketBaselineRuntime | null;
   readonly adapter: TxlineReadOnlyAdapter | null;
+  private readonly recordedReplay: DemoReplayInput | null;
+  private selectedReplay = "built-in";
   private abortController: AbortController | null = null;
   private startupError: string | null = null;
 
@@ -29,6 +35,7 @@ export class ProductRuntime {
     this.dataConfig = resolveDataRuntimeConfig(env);
     this.baselineConfig = resolveMarketBaselineRuntimeConfig(env);
     assertMarketBaselineStartupSafe(this.baselineConfig);
+    this.recordedReplay = loadRecordedReplay(env.REPLAY_FILE);
     this.demo = new DemoReplayEngine("replay", true);
     if (this.dataConfig.valid && this.dataConfig.mode === "txline") {
       this.adapter = new TxlineReadOnlyAdapter(this.dataConfig);
@@ -75,6 +82,31 @@ export class ProductRuntime {
     this.abortController?.abort();
   }
 
+  replays() {
+    return {
+      selected: this.selectedReplay,
+      options: [
+        { id: "built-in", label: "Built-in deterministic replay", available: true },
+        { id: "recorded-txodds", label: this.recordedReplay?.fixtureLabel ?? "Recorded TxODDS historical replay", available: this.recordedReplay !== null },
+      ],
+    };
+  }
+
+  selectReplay(replayId: string): DemoState {
+    if (this.mode !== "replay") throw new Error("REPLAY_CONTROLS_DISABLED_IN_TXLINE_MODE");
+    if (replayId === "built-in") {
+      this.selectedReplay = replayId;
+      this.demo = new DemoReplayEngine("replay", true);
+      return this.demo.getState();
+    }
+    if (replayId === "recorded-txodds" && this.recordedReplay) {
+      this.selectedReplay = replayId;
+      this.demo = new DemoReplayEngine("replay", true, this.recordedReplay);
+      return this.demo.getState();
+    }
+    throw new Error(replayId === "recorded-txodds" ? "RECORDED_REPLAY_UNAVAILABLE" : "UNKNOWN_REPLAY");
+  }
+
   private async onEvent(event: NormalizedEvent): Promise<void> {
     if (!this.live) return;
     const market = mapOddsUpdateToMarket(event.update, "TXODDS");
@@ -86,7 +118,7 @@ export class ProductRuntime {
     if (this.dataConfig.mode === "replay") {
       return {
         status: "CONNECTED",
-        display: "Deterministic sanitized replay",
+        display: this.selectedReplay === "recorded-txodds" ? "Sanitized recorded TxODDS historical replay" : "Deterministic sanitized replay",
         mode: "replay",
         network: "local",
         readOnly: true,
@@ -133,6 +165,8 @@ export class ProductRuntime {
       maker: available ? "PAPER_ENABLED" : "DISABLED",
       directional: "DISABLED_NON_INDEPENDENT_THEO",
       kelly: "DISABLED_NON_INDEPENDENT_THEO",
+      kellyImplemented: true,
+      kellyEnabled: false,
       realExecution: "DISABLED",
       walletOperations: "DISABLED",
       subscriptionActivation: "DISABLED",
@@ -140,7 +174,8 @@ export class ProductRuntime {
       estimatedEdge: null,
       directionalAction: "NO_ACTION",
       kellySize: null,
-      labels: ["PAPER MARKET MAKING", "NO REAL EXECUTION"],
+      labels: ["PAPER MARKET MAKING", "DIRECTIONAL TRADING DISABLED", "KELLY AVAILABLE BUT LOCKED", "NO REAL EXECUTION"],
+      reasonCodes: ["INDEPENDENT_THEO_UNAVAILABLE", "MARKET_BASELINE_IS_NOT_ALPHA", "KELLY_DISABLED"],
     };
   }
 
@@ -196,9 +231,9 @@ function liveState(runtime: LiveMarketBaselineRuntime, dataStatus: ReturnType<Pr
     theo: audit.filteredConsensus?.[0] ?? null,
     uncertainty: audit.uncertainty,
     edge: null,
-    width: null,
-    widthComponents: {},
-    inventoryLean: 0,
+    width: audit.quoteWidth,
+    widthComponents: audit.quoteWidth === null ? {} as Record<string, number> : { total: audit.quoteWidth },
+    inventoryLean: audit.inventoryLean,
     directionalLean: 0,
     proposedAction: "MAKE_MARKET",
     riskChecks: ["PAPER_ONLY", "DIRECTIONAL_DISABLED", "KELLY_DISABLED"],
@@ -264,4 +299,91 @@ function liveState(runtime: LiveMarketBaselineRuntime, dataStatus: ReturnType<Pr
     feesPaid: fees,
     makerFills: runtime.fills,
   };
+}
+
+type RecordedReplayFile = {
+  fixture?: Record<string, unknown>;
+  oddsRecords?: Array<{ update?: TxlineOddsUpdate; receiveTime?: string }>;
+  updates?: TxlineOddsUpdate[];
+};
+
+function loadRecordedReplay(configuredPath: string | undefined): DemoReplayInput | null {
+  const replayPath = path.resolve(configuredPath ?? "data/samples/txodds/replay/recorded-historical-replay.json");
+  if (!existsSync(replayPath)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(replayPath, "utf8")) as RecordedReplayFile;
+    const records = parsed.oddsRecords?.flatMap((record) => record.update ? [{ update: record.update, receiveTime: record.receiveTime }] : [])
+      ?? parsed.updates?.map((update) => ({ update, receiveTime: new Date(update.Ts).toISOString() }))
+      ?? [];
+    if (records.length === 0) return null;
+    records.sort((left, right) => String(left.receiveTime ?? left.update.Ts).localeCompare(String(right.receiveTime ?? right.update.Ts)));
+
+    const firstUpdate = records[0]!.update;
+    const fixtureId = String(parsed.fixture?.FixtureId ?? firstUpdate.FixtureId);
+    const home = String(parsed.fixture?.Participant1 ?? "Home");
+    const away = String(parsed.fixture?.Participant2 ?? "Away");
+    const fixtureLabel = `${home} vs ${away} · recorded TxODDS`;
+    const selections = new Map<string, DemoReplayInput["selections"][number]>();
+    const previous = new Map<string, number>();
+    const events: DemoReplayEvent[] = [];
+
+    for (const record of records) {
+      try {
+        const market = mapOddsUpdateToMarket(record.update, "REPLAY");
+        const probabilities = selectMarketProbabilities(record.update).probabilities;
+        for (const [selectionIndex, selection] of market.selections.entries()) {
+          const probability = probabilities[selectionIndex];
+          if (probability === undefined) continue;
+          const key = `${market.marketId}|${selection.selectionId}`;
+          if (!selections.has(key)) {
+            selections.set(key, {
+              marketId: market.marketId,
+              market: market.title,
+              selectionId: selection.selectionId,
+              selection: selection.label,
+              probability,
+            });
+          }
+          const prior = previous.get(key);
+          const eventIndex = events.length;
+          const collectedAt = validIso(record.receiveTime) ?? new Date(record.update.Ts).toISOString();
+          events.push({
+            eventId: `recorded-${record.update.MessageId ?? record.update.Ts}-${selectionIndex}`,
+            index: eventIndex,
+            replayTimeMs: eventIndex * 1_000,
+            fixtureId,
+            eventType: prior !== undefined && Math.abs(probability - prior) >= 0.08 ? "SHARP_MOVEMENT" : "MARKET_UPDATE",
+            marketId: market.marketId,
+            selectionId: selection.selectionId,
+            marketProbability: probability,
+            priceImpact: prior === undefined ? 0 : probability - prior,
+            description: "Sanitized recorded TxODDS historical market observation",
+            provenance: {
+              source: "TXODDS_REPLAY",
+              externalId: record.update.MessageId,
+              collectedAt,
+              notes: "Recorded read-only TxLINE devnet payload; credentials removed.",
+            },
+          });
+          previous.set(key, probability);
+        }
+      } catch {
+        // Preserve replay availability when the capture contains an unsupported
+        // market shape; valid events remain deterministic and auditable.
+      }
+    }
+
+    return events.length > 0 && selections.size > 0
+      ? { replayType: "RECORDED_TXODDS", fixtureId, fixtureLabel, events, selections: [...selections.values()] }
+      : null;
+  } catch (error) {
+    console.warn(`Recorded replay unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+function validIso(value: string | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }

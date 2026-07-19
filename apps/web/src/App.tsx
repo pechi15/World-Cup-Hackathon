@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, AlertTriangle, BadgeCheck, Pause, Play, RotateCcw, Shield, StepForward, Zap } from "lucide-react";
-import { Area, AreaChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { DemoState } from "../../../packages/contracts/src/index";
 import { demoApi } from "./lib/api/client";
 
@@ -16,6 +16,9 @@ export function App() {
     refetchInterval: 800,
     retry: 1,
   });
+  const healthQuery = useQuery({ queryKey: ["system-health"], queryFn: demoApi.health, refetchInterval: 5_000, retry: false });
+  const tradingQuery = useQuery({ queryKey: ["trading-status"], queryFn: demoApi.tradingStatus, refetchInterval: 5_000, retry: false });
+  const replaysQuery = useQuery({ queryKey: ["demo-replays"], queryFn: demoApi.replays, retry: 1 });
   const action = (fn: () => Promise<DemoState>) => useMutation({
     mutationFn: fn,
     onSuccess: (state) => queryClient.setQueryData(["demo-state"], state),
@@ -30,17 +33,29 @@ export function App() {
     mutationFn: demoApi.speed,
     onSuccess: (state) => queryClient.setQueryData(["demo-state"], state),
   });
+  const selectReplay = useMutation({
+    mutationFn: demoApi.selectReplay,
+    onSuccess: (state, replayId) => {
+      queryClient.setQueryData(["demo-state"], state);
+      queryClient.setQueryData(["demo-replays"], (current: typeof replaysQuery.data) => current ? { ...current, selected: replayId } : current);
+    },
+  });
 
   if (stateQuery.isLoading) return <Shell><StateMessage title="Loading demo" detail="Connecting to the replay backend." /></Shell>;
   if (stateQuery.isError) return <Shell><StateMessage title="Backend disconnected" detail={stateQuery.error.message} tone="danger" /></Shell>;
   const state = stateQuery.data!;
+  const backendStatus = healthQuery.isError ? "DISCONNECTED" : healthQuery.data ? "CONNECTED" : "CHECKING";
+  const txoddsStatus = healthQuery.data?.dataStatus.status ?? "UNAVAILABLE";
+  const kellyLocked = tradingQuery.data?.kellyEnabled === false;
+  const isBusy = start.isPending || pause.isPending || resume.isPending || reset.isPending || step.isPending || shock.isPending || speed.isPending || selectReplay.isPending;
 
   return (
     <Shell>
       <header className="status-bar">
         <Status icon={<BadgeCheck size={17} />} label="Data mode" value={state.dataMode.toUpperCase()} />
         <Status icon={<Activity size={17} />} label="Data source" value={state.dataSource} />
-        <Status icon={<Shield size={17} />} label="Backend" value={state.backendStatus} />
+        <Status icon={<Shield size={17} />} label="Backend" value={backendStatus} />
+        <Status icon={<Activity size={17} />} label="TxODDS adapter" value={txoddsStatus} />
         <Status icon={<Play size={17} />} label={state.dataMode === "replay" ? "Replay" : "Live paper"} value={state.dataMode === "replay" ? `${state.replayStatus} @ ${state.speed}x` : state.strategyStatus} />
         <Status icon={<Zap size={17} />} label="Pricing" value={state.theoProvider} />
         <Status icon={<AlertTriangle size={17} />} label="Kill switch" value={state.killSwitch ? "Enabled" : "Off"} />
@@ -53,15 +68,28 @@ export function App() {
           <p>{state.disclaimer}</p>
         </div>
         {state.dataMode === "replay" ? <div className="controls">
-          <button className="primary" onClick={() => start.mutate()}><Play size={16} /> Run Full Demo</button>
-          <button onClick={() => pause.mutate()}><Pause size={16} /> Pause</button>
-          <button onClick={() => resume.mutate()}><Play size={16} /> Resume</button>
-          <button onClick={() => reset.mutate()}><RotateCcw size={16} /> Reset</button>
-          <button onClick={() => step.mutate()}><StepForward size={16} /> Step</button>
-          {[1, 5, 20, 60].map((value) => <button key={value} onClick={() => speed.mutate(value)}>{value}x</button>)}
-          <button onClick={() => shock.mutate()}><Zap size={16} /> Inject information shock</button>
+          <label>Replay source
+            <select value={replaysQuery.data?.selected ?? "built-in"} onChange={(event) => selectReplay.mutate(event.target.value)} disabled={isBusy}>
+              {(replaysQuery.data?.options ?? [{ id: "built-in", label: "Built-in deterministic replay", available: true }]).map((option) => <option key={option.id} value={option.id} disabled={!option.available}>{option.label}{option.available ? "" : " (unavailable)"}</option>)}
+            </select>
+          </label>
+          <button className="primary" onClick={() => start.mutate()} disabled={isBusy}><Play size={16} /> Run Full Demo</button>
+          <button onClick={() => pause.mutate()} disabled={isBusy || state.replayStatus !== "RUNNING"}><Pause size={16} /> Pause</button>
+          <button onClick={() => resume.mutate()} disabled={isBusy || !["READY", "PAUSED"].includes(state.replayStatus)}><Play size={16} /> Resume</button>
+          <button onClick={() => reset.mutate()} disabled={isBusy}><RotateCcw size={16} /> Reset</button>
+          <button onClick={() => step.mutate()} disabled={isBusy || state.replayStatus === "COMPLETE"}><StepForward size={16} /> Step</button>
+          {[1, 5, 20, 60].map((value) => <button key={value} onClick={() => speed.mutate(value)} disabled={isBusy}>{value}x</button>)}
+          <button onClick={() => shock.mutate()} disabled={isBusy}><Zap size={16} /> Inject information shock</button>
         </div> : <div className="controls"><span>Live read-only TxODDS feed; replay controls are disabled.</span></div>}
       </section>
+      <div className="safety-badges">
+        <strong>PAPER MARKET MAKING</strong>
+        <strong>DIRECTIONAL TRADING DISABLED</strong>
+        <strong className={kellyLocked ? "locked" : ""} title={tradingQuery.data?.reasonCodes.join(", ")}>KELLY MODULE: AVAILABLE BUT LOCKED</strong>
+        <span>Requires independently calibrated theo</span>
+        <strong>REAL EXECUTION DISABLED</strong>
+        <strong>WALLET OPERATIONS DISABLED</strong>
+      </div>
 
       <main className="grid">
         <Panel title="Market Board" wide>

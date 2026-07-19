@@ -17,8 +17,9 @@ function arrayPayload<T>(value: unknown): T[] {
   if (Array.isArray(value)) return value as T[];
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
-    if (Array.isArray(record.data)) return record.data as T[];
-    if (Array.isArray(record.items)) return record.items as T[];
+    for (const key of ["data", "items", "updates", "odds", "scores", "fixtures", "history", "results"]) {
+      if (Array.isArray(record[key])) return record[key] as T[];
+    }
   }
   throw new Error("TXLINE_RESPONSE_NOT_ARRAY");
 }
@@ -69,6 +70,7 @@ export function maskSecret(value: string): string {
 export class TxlineReadOnlyAdapter {
   readonly store = new EventStore();
   private guestJwt: string | null = null;
+  private guestRefresh: Promise<void> | null = null;
   private connectionStatus: TxoddsAdapterStatus = "DISCONNECTED";
   private reasonCodes: string[] = ["TXODDS_NOT_CONNECTED"];
   private lastConnectedAt: string | null = null;
@@ -103,6 +105,16 @@ export class TxlineReadOnlyAdapter {
   }
 
   private async refreshGuestJwt(): Promise<void> {
+    if (this.guestRefresh) return this.guestRefresh;
+    this.guestRefresh = this.performGuestJwtRefresh();
+    try {
+      await this.guestRefresh;
+    } finally {
+      this.guestRefresh = null;
+    }
+  }
+
+  private async performGuestJwtRefresh(): Promise<void> {
     this.connectionStatus = "CONNECTING";
     this.reasonCodes = ["TXODDS_AUTHENTICATING"];
     const response = await this.fetcher(`${this.config.apiOrigin}/auth/guest/start`, { method: "POST" });
@@ -152,6 +164,26 @@ export class TxlineReadOnlyAdapter {
 
   async fetchScoreEventsForFixture(fixtureId: string): Promise<TxlineScoreEvent[]> {
     return arrayPayload<TxlineScoreEvent>(await this.requestJson(`/api/scores/snapshot/${encodeURIComponent(fixtureId)}`));
+  }
+
+  async fetchOddsUpdates(epochDay: number, hourOfDay: number, interval: number): Promise<TxlineOddsUpdate[]> {
+    return arrayPayload<TxlineOddsUpdate>(await this.requestJson(
+      `/api/odds/updates/${encodeURIComponent(epochDay)}/${encodeURIComponent(hourOfDay)}/${encodeURIComponent(interval)}`,
+    ));
+  }
+
+  async fetchScoreUpdatesForFixture(fixtureId: string): Promise<TxlineScoreEvent[]> {
+    return arrayPayload<TxlineScoreEvent>(await this.requestJson(`/api/scores/updates/${encodeURIComponent(fixtureId)}`));
+  }
+
+  async fetchScoreUpdates(epochDay: number, hourOfDay: number, interval: number): Promise<TxlineScoreEvent[]> {
+    return arrayPayload<TxlineScoreEvent>(await this.requestJson(
+      `/api/scores/updates/${encodeURIComponent(epochDay)}/${encodeURIComponent(hourOfDay)}/${encodeURIComponent(interval)}`,
+    ));
+  }
+
+  async fetchHistoricalScoresForFixture(fixtureId: string): Promise<TxlineScoreEvent[]> {
+    return arrayPayload<TxlineScoreEvent>(await this.requestJson(`/api/scores/historical/${encodeURIComponent(fixtureId)}`));
   }
 
   async captureLiveSnapshot(): Promise<TxlineLiveCapture> {

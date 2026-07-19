@@ -50,9 +50,38 @@ describe("demo API", () => {
     const theo = await fetch(`${baseUrl}/api/theo/status`).then((res) => res.json());
     expect(theo).toMatchObject({ status: "AVAILABLE_BENCHMARK", provenance: "TXODDS_MARKET_BASELINE", independentAlpha: false });
     const trading = await fetch(`${baseUrl}/api/trading/status`).then((res) => res.json());
-    expect(trading).toMatchObject({ maker: "PAPER_ENABLED", directional: "DISABLED_NON_INDEPENDENT_THEO", kelly: "DISABLED_NON_INDEPENDENT_THEO", realExecution: "DISABLED", estimatedEdge: null, kellySize: null });
+    expect(trading).toMatchObject({
+      maker: "PAPER_ENABLED",
+      directional: "DISABLED_NON_INDEPENDENT_THEO",
+      kelly: "DISABLED_NON_INDEPENDENT_THEO",
+      kellyImplemented: true,
+      kellyEnabled: false,
+      realExecution: "DISABLED",
+      estimatedEdge: null,
+      directionalAction: "NO_ACTION",
+      kellySize: null,
+    });
+    expect(trading.reasonCodes).toEqual(expect.arrayContaining(["INDEPENDENT_THEO_UNAVAILABLE", "MARKET_BASELINE_IS_NOT_ALPHA", "KELLY_DISABLED"]));
     for (const path of ["/api/quotes", "/api/positions", "/api/risk", "/api/performance", "/api/audit"]) {
       expect((await fetch(`${baseUrl}${path}`)).ok).toBe(true);
     }
+  });
+
+  it("selects the sanitized recorded TxODDS replay without affecting the built-in fallback", async () => {
+    const replays = await fetch(`${baseUrl}/api/demo/replays`).then((res) => res.json());
+    expect(replays.options).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "recorded-txodds", available: true }),
+    ]));
+    const recorded = await post("/api/demo/replay", { replayId: "recorded-txodds" });
+    expect(recorded.dataSource).toBe("RECORDED_TXODDS_HISTORICAL_REPLAY");
+    expect(recorded.totalEvents).toBeGreaterThan(0);
+    const started = await post("/api/demo/start");
+    expect(started.marketRows[0]?.fixture).toContain("recorded TxODDS");
+    const firstProbabilities = started.marketRows.map((row: { marketProbability: number }) => row.marketProbability);
+    await post("/api/demo/reset");
+    const repeated = await post("/api/demo/start");
+    expect(repeated.marketRows.map((row: { marketProbability: number }) => row.marketProbability)).toEqual(firstProbabilities);
+    const builtIn = await post("/api/demo/replay", { replayId: "built-in" });
+    expect(builtIn.dataSource).toBe("SANITIZED_DETERMINISTIC_REPLAY");
   });
 });

@@ -78,6 +78,16 @@ function numericalProbabilityCleanup(probabilities: number[], tolerance = 0.02):
   return probabilities.map((probability) => probability / mass);
 }
 
+function isTxlineDemarginedStablePrice(update: TxlineOddsUpdate): boolean {
+  return update.Bookmaker?.trim().toLowerCase() === "txlinestablepricedemargined";
+}
+
+function decodeTxlineDecimalOdds(price: number): number {
+  // Authenticated history currently represents StablePrice decimal odds as
+  // integer milliodds (3276 => 3.276). Raw Prices remain untouched in storage.
+  return Number.isInteger(price) && price >= 1_000 ? price / 1_000 : price;
+}
+
 /**
  * Selects and verifies the probability semantics before any model sees the data.
  *
@@ -105,7 +115,22 @@ export function selectMarketProbabilities(update: TxlineOddsUpdate): SelectedMar
   if (update.Prices.length !== update.PriceNames.length) {
     throw new Error("PRICES_SELECTION_COUNT_MISMATCH");
   }
-  const implied = update.Prices.map(decimalOddsToImplied);
+  if (isTxlineDemarginedStablePrice(update)) {
+    const impliedStable = update.Prices.map((price) => decimalOddsToImplied(decodeTxlineDecimalOdds(price)));
+    if (impliedStable.some((probability) => probability <= 0)) throw new Error("INVALID_STABLE_PRICE_DECIMAL_ODDS");
+    return {
+      probabilities: numericalProbabilityCleanup(impliedStable),
+      field: "STABLE_PRICE",
+      demarginingStatus: "VERIFIED_ALREADY_DEMARGINED",
+      reasonCodes: [
+        "TXLINE_STABLE_PRICE_DEMARGINED_SOURCE_VERIFIED",
+        "MILLIODDS_DECODED_WHEN_PRESENT",
+        "DOUBLE_DEVIG_SKIPPED",
+        "PCT_NOT_SELECTED_UNVERIFIED",
+      ],
+    };
+  }
+  const implied = update.Prices.map((price) => decimalOddsToImplied(decodeTxlineDecimalOdds(price)));
   if (implied.some((probability) => probability <= 0)) {
     throw new Error("INVALID_RAW_DECIMAL_PRICE");
   }

@@ -2,6 +2,29 @@ import { DemoStateSchema, type DemoState } from "../../../../../packages/contrac
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8787" : "");
 
+export type SystemHealth = {
+  ok: boolean;
+  dataStatus: { status: string; display: string; mode: string; reasonCodes: string[] };
+  dataMode: string;
+  theoMode: string;
+  tradingMode: string;
+};
+
+export type TradingStatus = {
+  maker: string;
+  directional: string;
+  kelly: string;
+  kellyImplemented: boolean;
+  kellyEnabled: boolean;
+  realExecution: string;
+  walletOperations: string;
+  subscriptionActivation: string;
+  directionalAction: "NO_ACTION";
+  kellySize: null;
+  labels: string[];
+  reasonCodes: string[];
+};
+
 async function request<T>(path: string, init?: RequestInit, parse?: (value: unknown) => T): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
@@ -13,6 +36,8 @@ async function request<T>(path: string, init?: RequestInit, parse?: (value: unkn
 }
 
 export const demoApi = {
+  health: () => request<SystemHealth>("/health"),
+  tradingStatus: () => request<TradingStatus>("/api/trading/status"),
   state: () => request<DemoState>("/api/demo/state", undefined, (value) => DemoStateSchema.parse(value)),
   start: () => request<DemoState>("/api/demo/start", { method: "POST" }, (value) => DemoStateSchema.parse(value)),
   pause: () => request<DemoState>("/api/demo/pause", { method: "POST" }, (value) => DemoStateSchema.parse(value)),
@@ -21,4 +46,6 @@ export const demoApi = {
   step: () => request<DemoState>("/api/demo/step", { method: "POST" }, (value) => DemoStateSchema.parse(value)),
   injectShock: () => request<DemoState>("/api/demo/inject-shock", { method: "POST" }, (value) => DemoStateSchema.parse(value)),
   speed: (speed: number) => request<DemoState>("/api/demo/speed", { method: "POST", body: JSON.stringify({ speed }) }, (value) => DemoStateSchema.parse(value)),
+  replays: () => request<{ selected: string; options: Array<{ id: string; label: string; available: boolean }> }>("/api/demo/replays"),
+  selectReplay: (replayId: string) => request<DemoState>("/api/demo/replay", { method: "POST", body: JSON.stringify({ replayId }) }, (value) => DemoStateSchema.parse(value)),
 };

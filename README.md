@@ -7,7 +7,7 @@ Submission-ready autonomous paper market maker centred on a TxODDS market-consen
 - `NO PROPRIETARY ALPHA`
 - `NO REAL EXECUTION`
 
-The state-space component is a market filter only. Directional actions are always `NO_ACTION`, estimated edge and Kelly size remain null, and wallet/subscription operations are hard-disabled.
+The state-space component is a market filter only. Directional actions are always `NO_ACTION`. The guarded fractional-Kelly utility is available but locked in market-baseline mode, so Kelly size remains null. Wallet and subscription operations are hard-disabled.
 
 ## Local replay
 
@@ -17,7 +17,7 @@ npm.cmd ci
 npm.cmd run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). The deterministic replay uses conservative future-observation crossing; zero fills is reported honestly when no eligible observation crosses a resting quote.
+Open [http://localhost:5173](http://localhost:5173). The deterministic replay uses conservative future-observation crossing; zero fills is reported honestly when no eligible observation crosses a resting quote. Use the replay selector to switch to the committed sanitized historical TxODDS recording.
 
 ## Verification
 
