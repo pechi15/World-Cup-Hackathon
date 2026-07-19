@@ -1,13 +1,34 @@
 import http from "node:http";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { URL } from "node:url";
 import { fixtures, markets, marketPrices, defaultRiskLimits } from "./sample-data.js";
 import type { Order } from "../../../packages/contracts/src/index.js";
 import { ProductRuntime } from "./product-runtime.js";
+import {
+  DualStrategyController,
+  loadAdaptiveQuoteGuard,
+  type SanitizedMarketEvent,
+} from "../../../packages/live-agents/src/index.js";
 
 const port = Number(process.env.PORT ?? 8787);
 const host = process.env.HOST ?? "0.0.0.0";
 const product = new ProductRuntime(process.env);
 const rateLimit = new Map<string, { count: number; resetAt: number }>();
+const backendRoot = path.resolve();
+const currentFixtureSample = JSON.parse(readFileSync(
+  path.join(backendRoot, "data", "samples", "txodds", "current", "argentina-spain.json"),
+  "utf8",
+)) as Record<string, unknown> & { marketSnapshots: SanitizedMarketEvent[] };
+const historicalReplaySample = JSON.parse(readFileSync(
+  path.join(backendRoot, "data", "samples", "txodds", "replay", "england-france-third-place.json"),
+  "utf8",
+)) as Record<string, unknown> & { marketEvents: SanitizedMarketEvent[] };
+const adaptiveQuoteGuard = loadAdaptiveQuoteGuard(
+  path.join(backendRoot, "data", "samples", "demo", "adaptive-quote-guard"),
+);
+const makerHawkController = new DualStrategyController(adaptiveQuoteGuard, { ...defaultRiskLimits });
+for (const event of currentFixtureSample.marketSnapshots) makerHawkController.ingest(event, "LIVE");
 void product.start();
 
 function send(req: http.IncomingMessage, res: http.ServerResponse, statusCode: number, body: unknown) {
@@ -61,8 +82,53 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
     return send(req, res, ready ? 200 : 503, { ready, mode: product.mode, dataStatus: product.dataStatus(), reasonCodes: product.baselineConfig.reasonCodes });
   }
   if (req.method === "GET" && path === "/api/txodds/status") return send(req, res, 200, product.dataStatus());
+  if (req.method === "GET" && path === "/api/fixtures/current") return send(req, res, 200, currentFixtureSample);
+  if (req.method === "GET" && path === "/api/replays") {
+    return send(req, res, 200, [{
+      id: historicalReplaySample.id,
+      provenance: historicalReplaySample.provenance,
+      labels: historicalReplaySample.labels,
+      fixture: historicalReplaySample.fixture,
+      eventCount: historicalReplaySample.marketEvents.length,
+      finalState: historicalReplaySample.finalState,
+      deterministic: true,
+    }]);
+  }
+  if (req.method === "GET" && path.startsWith("/api/replays/")) {
+    const id = decodeURIComponent(path.slice("/api/replays/".length));
+    return id === historicalReplaySample.id
+      ? send(req, res, 200, historicalReplaySample)
+      : send(req, res, 404, { error: "UNKNOWN_REPLAY", id });
+  }
+  if (req.method === "GET" && path === "/api/agent/status") return send(req, res, 200, makerHawkController.status());
+  if (req.method === "GET" && path === "/api/agent/maker") return send(req, res, 200, makerHawkController.maker.status());
+  if (req.method === "GET" && path === "/api/agent/hawk") return send(req, res, 200, makerHawkController.hawk.status());
+  if (req.method === "GET" && path === "/api/decision-book") {
+    return send(req, res, 200, {
+      ...makerHawkController.shared.decisionBook.status(),
+      decisions: makerHawkController.shared.decisionBook.all(),
+    });
+  }
+  if (req.method === "GET" && path.startsWith("/api/decision-book/")) {
+    const decisionId = decodeURIComponent(path.slice("/api/decision-book/".length));
+    const decision = makerHawkController.shared.decisionBook.get(decisionId);
+    return decision
+      ? send(req, res, 200, decision)
+      : send(req, res, 404, { error: "UNKNOWN_DECISION", decisionId });
+  }
   if (req.method === "GET" && path === "/api/theo/status") return send(req, res, 200, product.theoStatus());
-  if (req.method === "GET" && path === "/api/trading/status") return send(req, res, 200, product.tradingStatus());
+  if (req.method === "GET" && path === "/api/trading/status") {
+    return send(req, res, 200, {
+      ...product.tradingStatus(),
+      hawk: makerHawkController.hawk.status().state,
+      sharedRisk: makerHawkController.shared.status(),
+      agentAutonomous: true,
+      executionMode: "SHADOW",
+      shadowExecution: "ENABLED",
+      decisionBookEnabled: true,
+      realExecutionEnabled: false,
+    });
+  }
 
   if (req.method === "GET" && path === "/api/demo/status") {
     const state = product.state();
@@ -175,7 +241,14 @@ if (process.argv[1]?.endsWith("server.ts") || process.argv[1]?.endsWith("server.
   });
 }
 
-export { route, product };
+export {
+  route,
+  product,
+  makerHawkController,
+  currentFixtureSample,
+  historicalReplaySample,
+  adaptiveQuoteGuard,
+};
 
 function allowedCorsOrigin(origin: string | undefined) {
   const allowed = new Set((process.env.ALLOWED_ORIGINS ?? "http://localhost:5173,http://127.0.0.1:5173")
