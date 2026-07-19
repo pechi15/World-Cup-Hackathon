@@ -75,7 +75,7 @@ export function App() {
           </div>
           <span className={`connection-dot ${backendStatus === "CONNECTED" ? "connected" : ""}`}>{backendStatus}</span>
         </div>
-        <Status icon={<Radio size={16} />} label="Data source" value={state.dataSource} />
+        <Status icon={<Radio size={16} />} label="TxLINE status" value={state.dataMode === "replay" ? "OFF · REPLAY ACTIVE" : txoddsStatus} />
         <Status icon={<Activity size={16} />} label={state.dataMode === "replay" ? "Replay status" : "Live status"} value={state.dataMode === "replay" ? `${state.replayStatus} @ ${state.speed}x` : txoddsStatus} />
         <Status icon={<BadgeCheck size={16} />} label="Agent running" value={state.strategyStatus} />
         <Status icon={<ShieldCheck size={16} />} label="Execution" value="SHADOW ONLY" />
