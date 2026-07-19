@@ -61,7 +61,7 @@ export function App() {
   const freshnessState = state.dataFreshnessMs == null ? "NO DATA" : state.dataFreshnessMs > 5_000 ? "STALE" : "FRESH";
   const foragerReason = foragerAgent?.reasonCodes[0] ?? "AWAITING_SIGNAL";
   const fixtureParticipants = fixtureQuery.data
-    ? [fixtureQuery.data.fixture.participant1, fixtureQuery.data.fixture.participant2].sort((left, right) => left.localeCompare(right)).join("–")
+    ? [fixtureQuery.data.fixture.participant1, fixtureQuery.data.fixture.participant2].join(" vs ")
     : "Awaiting fixture data";
 
   return (
