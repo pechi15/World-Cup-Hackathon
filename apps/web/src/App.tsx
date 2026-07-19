@@ -48,6 +48,9 @@ export function App() {
   const txoddsStatus = healthQuery.data?.dataStatus.status ?? "UNAVAILABLE";
   const kellyLocked = tradingQuery.data?.kellyEnabled === false;
   const isBusy = start.isPending || pause.isPending || resume.isPending || reset.isPending || step.isPending || shock.isPending || speed.isPending || selectReplay.isPending;
+  const makerRow = state.marketRows.find((row) => row.status === "LIVE" && row.bid !== null && row.ask !== null) ?? state.marketRows[0];
+  const makerAction = state.audit.at(-1)?.finalAction ?? "WAITING_FOR_MARKET";
+  const makerState = tradingQuery.data?.maker ?? (makerRow?.status === "LIVE" ? "PAPER_ENABLED" : "WAITING");
 
   return (
     <Shell>
@@ -90,6 +93,26 @@ export function App() {
         <strong>REAL EXECUTION DISABLED</strong>
         <strong>WALLET OPERATIONS DISABLED</strong>
       </div>
+
+      <section className="agent-grid" aria-label="Agent status">
+        <article className="agent-card maker-agent">
+          <div className="agent-card-heading">
+            <div>
+              <p className="agent-kicker">MARKET CONSENSUS · PAPER EXECUTION</p>
+              <h2>Maker Agent</h2>
+            </div>
+            <span className="agent-state">{makerState}</span>
+          </div>
+          <p className="agent-fixture">{makerRow?.fixture ?? "Awaiting fixture data"}</p>
+          <dl className="agent-metrics">
+            <div><dt>Latest action</dt><dd>{makerAction}</dd></div>
+            <div><dt>Bid / Ask</dt><dd>{fmtNum(makerRow?.bid)} / {fmtNum(makerRow?.ask)}</dd></div>
+            <div><dt>Width</dt><dd>{fmtNum(makerRow?.width)}</dd></div>
+            <div><dt>Size</dt><dd>{fmtNum(makerRow?.bidSize)} / {fmtNum(makerRow?.askSize)}</dd></div>
+            <div><dt>Inventory lean</dt><dd>{fmtNum(makerRow?.inventoryLean)}</dd></div>
+          </dl>
+        </article>
+      </section>
 
       <main className="grid">
         <Panel title="Market Board" wide>

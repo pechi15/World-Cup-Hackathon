@@ -17,11 +17,17 @@ test("dashboard completes the maker-only replay lifecycle", async ({ page, reque
   await expect(page.locator(".status-bar")).toContainText("CONNECTED");
 
   const marketBoard = page.getByRole("heading", { name: "Market Board" }).locator("..");
+  const makerAgent = page.getByRole("heading", { name: "Maker Agent" }).locator("..");
   const positions = page.getByRole("heading", { name: "Positions" }).locator("..");
   const riskSheet = page.getByRole("heading", { name: "Risk Sheet" }).locator("..");
   const performance = page.getByRole("heading", { name: "Performance" }).locator("..");
   const fillHistory = page.getByRole("heading", { name: "Maker Fill History" }).locator("..");
   const auditTrail = page.getByRole("heading", { name: "Audit Trail" }).locator("..");
+  await expect(makerAgent).toContainText("PAPER EXECUTION");
+  await expect(makerAgent).toContainText("Latest action");
+  await expect(makerAgent).toContainText("Bid / Ask");
+  await expect(makerAgent).toContainText("Inventory lean");
+  const initialMaker = await makerAgent.textContent();
   const initialRisk = await riskSheet.textContent();
   const initialPerformance = await performance.textContent();
 
@@ -42,6 +48,8 @@ test("dashboard completes the maker-only replay lifecycle", async ({ page, reque
   await expect(marketBoard).toContainText("LIVE");
   await expect(fillHistory).not.toContainText("Zero fills");
   await expect(auditTrail).toContainText("PAPER_MAKER_FILL");
+  await expect(makerAgent).toContainText("PAPER_ENABLED");
+  expect(await makerAgent.textContent()).not.toBe(initialMaker);
   expect(await riskSheet.textContent()).not.toBe(initialRisk);
   expect(await performance.textContent()).not.toBe(initialPerformance);
 

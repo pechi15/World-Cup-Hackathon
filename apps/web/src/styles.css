@@ -25,6 +25,17 @@ button.primary { background: #0f766e; color: white; border-color: #0f766e; }
 .safety-badges strong { background: #e0f2f1; color: #0f766e; }
 .safety-badges strong.locked { background: #fff7ed; color: #9a5708; }
 .safety-badges span { color: #526170; }
+.agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.agent-card { background: #101820; color: white; border: 1px solid #263746; padding: 16px; min-height: 178px; }
+.agent-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.agent-card h2 { margin: 2px 0 0; font-size: 19px; }
+.agent-kicker { margin: 0; color: #7dd3c7; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+.agent-state { background: #e0f2f1; color: #0f766e; padding: 4px 7px; font-size: 10px; font-weight: 800; overflow-wrap: anywhere; }
+.agent-fixture { margin: 10px 0; color: #b8c4d0; font-size: 12px; }
+.agent-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.agent-metrics div { border-top: 1px solid #314454; padding-top: 8px; min-width: 0; }
+.agent-metrics dt { color: #9fb0bf; font-size: 10px; }
+.agent-metrics dd { margin: 4px 0 0; font-size: 12px; font-weight: 750; overflow-wrap: anywhere; }
 .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .panel { background: white; border: 1px solid #d8e0e8; padding: 14px; min-height: 210px; }
 .panel.wide { grid-column: span 3; }
@@ -54,4 +65,5 @@ footer { color: #526170; font-size: 12px; padding: 20px 0 4px; }
   .status-bar, .grid, .hero { grid-template-columns: 1fr; }
   .panel.wide { grid-column: span 1; }
   .controls { justify-content: flex-start; }
+  .agent-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
