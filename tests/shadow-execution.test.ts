@@ -81,6 +81,18 @@ async function get(pathName: string): Promise<{ status: number; body: unknown }>
   return { status, body: JSON.parse(raw) };
 }
 
+async function post(pathName: string): Promise<{ status: number; body: unknown }> {
+  let status = 0;
+  let raw = "";
+  const request = { method: "POST", url: pathName, headers: { host: "localhost" }, socket: { remoteAddress: "shadow-test" } } as IncomingMessage;
+  const response = {
+    writeHead(code: number) { status = code; },
+    end(body: string) { raw = body; },
+  } as unknown as ServerResponse;
+  await route(request, response);
+  return { status, body: JSON.parse(raw) };
+}
+
 describe("Hive Decision Book causal assertions", () => {
   it("rejects future features and prohibited final-result features", () => {
     const book = new DecisionBook();
@@ -237,6 +249,8 @@ describe("shadow and bee presentation API", () => {
   });
 
   it("exposes the Hive Decision Book and prohibits real execution", async () => {
+    await post("/api/demo/reset");
+    await post("/api/demo/step");
     const list = (await get("/api/decision-book")).body as { decisions: Array<{ decisionId: string }> };
     expect(list).toMatchObject({ displayName: "Hive Decision Book", enabled: true, executionMode: "SHADOW", realFundsEnabled: false });
     expect(list.decisions.length).toBeGreaterThan(0);

@@ -6,8 +6,6 @@ import { fixtures, markets, marketPrices, defaultRiskLimits } from "./sample-dat
 import type { Order } from "../../../packages/contracts/src/index.js";
 import { ProductRuntime } from "./product-runtime.js";
 import {
-  DualStrategyController,
-  loadAdaptiveQuoteGuard,
   type SanitizedMarketEvent,
 } from "../../../packages/live-agents/src/index.js";
 
@@ -24,11 +22,8 @@ const historicalReplaySample = JSON.parse(readFileSync(
   path.join(backendRoot, "data", "samples", "txodds", "replay", "england-france-third-place.json"),
   "utf8",
 )) as Record<string, unknown> & { marketEvents: SanitizedMarketEvent[] };
-const adaptiveQuoteGuard = loadAdaptiveQuoteGuard(
-  path.join(backendRoot, "data", "samples", "demo", "adaptive-quote-guard"),
-);
-const makerHawkController = new DualStrategyController(adaptiveQuoteGuard, { ...defaultRiskLimits });
-for (const event of currentFixtureSample.marketSnapshots) makerHawkController.ingest(event, "LIVE");
+const adaptiveQuoteGuard = product.agents.quoteGuard;
+const makerHawkController = product.agents;
 void product.start();
 
 function send(req: http.IncomingMessage, res: http.ServerResponse, statusCode: number, body: unknown) {
@@ -100,18 +95,23 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
       ? send(req, res, 200, historicalReplaySample)
       : send(req, res, 404, { error: "UNKNOWN_REPLAY", id });
   }
-  if (req.method === "GET" && path === "/api/agent/status") return send(req, res, 200, makerHawkController.status());
-  if (req.method === "GET" && path === "/api/agent/maker") return send(req, res, 200, makerHawkController.maker.status());
-  if (req.method === "GET" && path === "/api/agent/hawk") return send(req, res, 200, makerHawkController.hawk.status());
+  if (req.method === "GET" && path === "/api/agent/status") return send(req, res, 200, product.agents.status());
+  if (req.method === "GET" && path === "/api/agent/maker") return send(req, res, 200, product.agents.maker.status());
+  if (req.method === "GET" && path === "/api/agent/hawk") return send(req, res, 200, product.agents.hawk.status());
   if (req.method === "GET" && path === "/api/decision-book") {
+    const decisions = product.agents.shared.decisionBook.all();
     return send(req, res, 200, {
-      ...makerHawkController.shared.decisionBook.status(),
-      decisions: makerHawkController.shared.decisionBook.all(),
+      ...product.agents.shared.decisionBook.status(),
+      strategyDecisionCount: decisions.length,
+      orderCount: decisions.filter((decision) => decision.action.includes("PAPER_QUOTE") || decision.action.includes("PAPER_POSITION")).length,
+      fillCount: decisions.filter((decision) => decision.fillEventId !== null).length,
+      positionCount: product.agents.shared.shadowExecution.positionCount(),
+      decisions,
     });
   }
   if (req.method === "GET" && path.startsWith("/api/decision-book/")) {
     const decisionId = decodeURIComponent(path.slice("/api/decision-book/".length));
-    const decision = makerHawkController.shared.decisionBook.get(decisionId);
+    const decision = product.agents.shared.decisionBook.get(decisionId);
     return decision
       ? send(req, res, 200, decision)
       : send(req, res, 404, { error: "UNKNOWN_DECISION", decisionId });
@@ -120,8 +120,8 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
   if (req.method === "GET" && path === "/api/trading/status") {
     return send(req, res, 200, {
       ...product.tradingStatus(),
-      hawk: makerHawkController.hawk.status().state,
-      sharedRisk: makerHawkController.shared.status(),
+      hawk: product.agents.hawk.status().state,
+      sharedRisk: product.agents.shared.status(),
       agentAutonomous: true,
       executionMode: "SHADOW",
       shadowExecution: "ENABLED",
@@ -132,11 +132,20 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
 
   if (req.method === "GET" && path === "/api/demo/status") {
     const state = product.state();
-    return send(req, res, 200, { status: state.replayStatus, backendStatus: state.backendStatus, mode: product.mode });
+    return send(req, res, 200, {
+      status: state.replayStatus,
+      backendStatus: state.backendStatus,
+      mode: product.mode,
+      currentIndex: state.currentIndex,
+      processedEventCount: state.currentIndex,
+      runId: product.agents.maker.status().runId,
+    });
   }
   if (req.method === "GET" && path === "/api/demo/state") {
-    if (product.mode === "replay") product.demo.tick();
     return send(req, res, 200, product.state());
+  }
+  if (req.method === "GET" && (path === "/api/runtime/snapshot" || path === "/api/demo/snapshot")) {
+    return send(req, res, 200, runtimeSnapshot());
   }
   if (req.method === "GET" && path === "/api/demo/replays") return send(req, res, 200, product.replays());
   if (req.method === "GET" && path === "/api/demo/audit") return send(req, res, 200, product.state().audit);
@@ -144,11 +153,11 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
   if (req.method === "POST" && path.startsWith("/api/demo/")) {
     if (product.mode !== "replay") return send(req, res, 409, { error: "REPLAY_CONTROLS_DISABLED_IN_TXLINE_MODE" });
     if (checkRateLimit(req)) return send(req, res, 429, { error: "RATE_LIMITED" });
-    if (path === "/api/demo/start") product.demo.start();
-    else if (path === "/api/demo/pause") product.demo.pause();
-    else if (path === "/api/demo/resume") product.demo.resume();
-    else if (path === "/api/demo/reset") product.demo.reset();
-    else if (path === "/api/demo/step") product.demo.step();
+    if (path === "/api/demo/start") return send(req, res, 200, product.startReplay());
+    else if (path === "/api/demo/pause") return send(req, res, 200, product.pauseReplay());
+    else if (path === "/api/demo/resume") return send(req, res, 200, product.resumeReplay());
+    else if (path === "/api/demo/reset") return send(req, res, 200, product.resetReplay());
+    else if (path === "/api/demo/step") return send(req, res, 200, product.stepReplay());
     else if (path === "/api/demo/inject-shock") product.demo.injectShock();
     else if (path === "/api/demo/replay") {
       const body = await readJson(req) as { replayId?: string };
@@ -161,7 +170,7 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
     }
     else if (path === "/api/demo/speed") {
       const body = await readJson(req) as { speed?: number };
-      product.demo.setSpeed(Number(body.speed));
+      return send(req, res, 200, product.setReplaySpeed(Number(body.speed)));
     } else return send(req, res, 404, { error: "NOT_FOUND" });
     return send(req, res, 200, product.state());
   }
@@ -222,6 +231,30 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
   }
 
   return send(req, res, 404, { error: "NOT_FOUND" });
+}
+
+function runtimeSnapshot() {
+  const state = product.state();
+  const agentStatus = product.agents.status();
+  const maker = agentStatus.maker;
+  const decisions = product.agents.shared.decisionBook.all();
+  return {
+    runId: maker.runId,
+    eventIndex: state.currentIndex,
+    sourceTimestamp: maker.sourceTimestamp,
+    fixtureId: maker.currentMarketObservation?.fixtureId ?? null,
+    marketId: maker.currentMarketObservation?.marketId ?? null,
+    selectionId: maker.currentMarketObservation?.selectionId ?? null,
+    marketReference: maker.currentMarketObservation?.marketReference ?? null,
+    activeQuote: maker.activeQuote,
+    latestDecision: maker.latestDecision,
+    state,
+    agentStatus,
+    decisionBook: {
+      ...product.agents.shared.decisionBook.status(),
+      decisions,
+    },
+  };
 }
 
 if (process.argv[1]?.endsWith("server.ts") || process.argv[1]?.endsWith("server.js")) {

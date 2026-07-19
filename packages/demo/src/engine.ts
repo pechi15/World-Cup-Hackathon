@@ -95,7 +95,6 @@ export class DemoReplayEngine {
   start() {
     this.reset();
     this.status = "RUNNING";
-    this.stepMany(6);
   }
 
   pause() {
@@ -136,17 +135,18 @@ export class DemoReplayEngine {
     this.stepMany(Math.max(1, Math.min(this.speed, 8)));
   }
 
-  step() {
-    if (this.status === "COMPLETE") return;
+  step(): DemoReplayEvent | null {
+    if (this.status === "COMPLETE") return null;
     this.status = this.status === "READY" ? "PAUSED" : this.status;
     const event = this.events[this.currentIndex];
     if (!event) {
       this.status = "COMPLETE";
-      return;
+      return null;
     }
     this.applyEvent(event);
     this.currentIndex += 1;
     if (this.currentIndex >= this.events.length) this.status = "COMPLETE";
+    return event;
   }
 
   getState(): DemoState {
@@ -227,12 +227,16 @@ export class DemoReplayEngine {
     const row = target ? rows.find((item) => item.marketId === target.marketId && item.selectionId === target.selectionId) : rows[0];
     if (row) {
       this.chart.push({
-        index: event.index,
-        label: String(event.index),
+        index: event.index + 1,
+        label: String(event.index + 1),
         marketProbability: row.marketProbability,
         theoProbability: row.theoProbability,
         bid: row.bid,
         ask: row.ask,
+        fixtureId: event.fixtureId,
+        marketId: row.marketId,
+        selectionId: row.selectionId,
+        sourceTimestamp: validEventTimestamp(event),
         eventType: event.eventType === "MARKET_UPDATE" ? undefined : event.eventType,
       });
       this.maybeFill(event, row);
@@ -468,6 +472,12 @@ export class DemoReplayEngine {
       provenance: event.provenance,
     };
   }
+}
+
+function validEventTimestamp(event: DemoReplayEvent): string {
+  const collectedAt = event.provenance.collectedAt;
+  if (collectedAt && Number.isFinite(Date.parse(collectedAt))) return new Date(collectedAt).toISOString();
+  return new Date(event.replayTimeMs).toISOString();
 }
 
 export function createDemoMarkets(): MarketDefinition[] {

@@ -19,6 +19,12 @@ import {
   LiveMarketBaselineRuntime,
   resolveMarketBaselineRuntimeConfig,
 } from "../../../packages/live-market-baseline/src/index.js";
+import {
+  DualStrategyController,
+  loadAdaptiveQuoteGuard,
+  sanitizeMarketUpdate,
+  type SanitizedMarketEvent,
+} from "../../../packages/live-agents/src/index.js";
 
 export class ProductRuntime {
   readonly dataConfig: DataRuntimeConfig;
@@ -26,12 +32,16 @@ export class ProductRuntime {
   demo: DemoReplayEngine;
   readonly live: LiveMarketBaselineRuntime | null;
   readonly adapter: TxlineReadOnlyAdapter | null;
+  readonly agents: DualStrategyController;
   private readonly recordedReplay: DemoReplayInput | null;
   private readonly liveFixtureLabel: string;
   private readonly historicalFixtureLabel: string;
   private selectedReplay = "built-in";
   private abortController: AbortController | null = null;
+  private replayTimer: ReturnType<typeof setInterval> | null = null;
   private startupError: string | null = null;
+  private replayRunSequence = 0;
+  private replayRunId = "replay-0";
 
   constructor(private readonly env: Record<string, string | undefined> = process.env) {
     this.dataConfig = resolveDataRuntimeConfig(env);
@@ -45,6 +55,10 @@ export class ProductRuntime {
     ) ?? "Live fixture unavailable";
     this.historicalFixtureLabel = loadFixtureLabel(historicalPath, "Historical") ?? "Historical replay unavailable";
     this.demo = new DemoReplayEngine("replay", true);
+    this.agents = new DualStrategyController(loadAdaptiveQuoteGuard(path.resolve(
+      "data/samples/demo/adaptive-quote-guard",
+    )), { ...defaultRiskLimits });
+    this.agents.reset(this.nextReplayRunId());
     if (this.dataConfig.valid && this.dataConfig.mode === "txline") {
       this.adapter = new TxlineReadOnlyAdapter(this.dataConfig);
       this.live = new LiveMarketBaselineRuntime(this.baselineConfig, { ...defaultRiskLimits });
@@ -88,6 +102,7 @@ export class ProductRuntime {
 
   stop(): void {
     this.abortController?.abort();
+    this.stopReplayTimer();
   }
 
   replays() {
@@ -103,6 +118,8 @@ export class ProductRuntime {
 
   selectReplay(replayId: string): DemoState {
     if (this.mode !== "replay") throw new Error("REPLAY_CONTROLS_DISABLED_IN_TXLINE_MODE");
+    this.stopReplayTimer();
+    this.agents.reset(this.nextReplayRunId());
     if (replayId === "built-in") {
       this.selectedReplay = replayId;
       this.demo = new DemoReplayEngine("replay", true);
@@ -121,6 +138,99 @@ export class ProductRuntime {
     if (!this.live) return;
     const market = mapOddsUpdateToMarket(event.update, "TXODDS");
     await this.live.onObservation(market, toNormalizedMarketObservation(event));
+    this.agents.ingest(sanitizeMarketUpdate(event.update), "LIVE", market, {
+      runId: "live",
+      eventIndex: this.agents.audit.length + 1,
+      provenance: "SANITIZED_TXODDS",
+    });
+  }
+
+  startReplay(): DemoState {
+    this.assertReplayMode();
+    this.stopReplayTimer();
+    this.agents.reset(this.nextReplayRunId());
+    this.demo.start();
+    this.processNextReplayEvent();
+    this.scheduleReplay();
+    return this.state();
+  }
+
+  pauseReplay(): DemoState {
+    this.assertReplayMode();
+    this.stopReplayTimer();
+    this.demo.pause();
+    return this.state();
+  }
+
+  resumeReplay(): DemoState {
+    this.assertReplayMode();
+    this.demo.resume();
+    this.processNextReplayEvent();
+    this.scheduleReplay();
+    return this.state();
+  }
+
+  resetReplay(): DemoState {
+    this.assertReplayMode();
+    this.stopReplayTimer();
+    this.demo.reset();
+    this.agents.reset(this.nextReplayRunId());
+    return this.state();
+  }
+
+  stepReplay(): DemoState {
+    this.assertReplayMode();
+    this.stopReplayTimer();
+    this.demo.pause();
+    this.processNextReplayEvent();
+    return this.state();
+  }
+
+  setReplaySpeed(speed: number): DemoState {
+    this.assertReplayMode();
+    this.demo.setSpeed(speed);
+    return this.state();
+  }
+
+  private assertReplayMode(): void {
+    if (this.mode !== "replay") throw new Error("REPLAY_CONTROLS_DISABLED_IN_TXLINE_MODE");
+  }
+
+  private processNextReplayEvent(): void {
+    const event = this.demo.step();
+    if (!event) {
+      this.stopReplayTimer();
+      return;
+    }
+    this.agents.ingest(toSanitizedReplayEvent(event), "REPLAY", undefined, {
+      runId: this.replayRunId,
+      eventIndex: this.demo.getState().currentIndex,
+      provenance: this.selectedReplay === "historical-recorded" ? "RECORDED_TXODDS_REPLAY" : "DETERMINISTIC_REPLAY",
+    });
+  }
+
+  private scheduleReplay(): void {
+    this.stopReplayTimer();
+    if (this.demo.getState().replayStatus !== "RUNNING") return;
+    this.replayTimer = setInterval(() => {
+      const count = Math.max(1, Math.min(this.demo.getState().speed, 8));
+      for (let index = 0; index < count && this.demo.getState().replayStatus !== "COMPLETE"; index += 1) {
+        this.processNextReplayEvent();
+      }
+      if (this.demo.getState().replayStatus === "COMPLETE") this.stopReplayTimer();
+    }, 800);
+    this.replayTimer.unref?.();
+  }
+
+  private stopReplayTimer(): void {
+    if (this.replayTimer) clearInterval(this.replayTimer);
+    this.replayTimer = null;
+  }
+
+  private nextReplayRunId(): string {
+    this.replayRunSequence += 1;
+    this.replayRunId = `replay-${this.replayRunSequence}`;
+    return this.replayRunId;
   }
 
   dataStatus() {
@@ -192,9 +302,56 @@ export class ProductRuntime {
   }
 
   state(): DemoState {
-    if (this.mode !== "txline" || !this.live) return this.demo.getState();
+    if (this.mode !== "txline" || !this.live) return synchronizedReplayState(this.demo.getState(), this.agents.maker.status());
     return liveState(this.live, this.dataStatus());
   }
+}
+
+function synchronizedReplayState(state: DemoState, maker: ReturnType<DualStrategyController["maker"]["status"]>): DemoState {
+  const observation = maker.currentMarketObservation;
+  if (!observation || maker.eventIndex !== state.currentIndex) return state;
+  const quote = maker.activeQuote;
+  const marketRows = state.marketRows.map((row) => row.marketId === observation.marketId && row.selectionId === observation.selectionId
+    ? {
+        ...row,
+        bid: quote?.status === "ACTIVE" ? quote.bid : null,
+        ask: quote?.status === "ACTIVE" ? quote.ask : null,
+        width: quote?.status === "ACTIVE" ? quote.width : null,
+        bidSize: quote?.status === "ACTIVE" ? quote.size : null,
+        askSize: quote?.status === "ACTIVE" ? quote.size : null,
+        status: quote?.status ?? "QUOTING_DISABLED",
+        reasonCodes: [...maker.reasonCodes],
+      }
+    : row);
+  const chart = state.chart.map((point) => point.index === maker.eventIndex
+    && point.marketId === observation.marketId
+    && point.selectionId === observation.selectionId
+    ? {
+        ...point,
+        bid: quote?.status === "ACTIVE" ? quote.bid : null,
+        ask: quote?.status === "ACTIVE" ? quote.ask : null,
+      }
+    : point);
+  return { ...state, marketRows, chart };
+}
+
+function toSanitizedReplayEvent(event: DemoReplayEvent): SanitizedMarketEvent {
+  return {
+    timestamp: validIso(event.provenance.collectedAt) ?? new Date(event.replayTimeMs).toISOString(),
+    fixtureId: event.fixtureId,
+    marketId: event.marketId ?? "unknown-market",
+    marketType: "REPLAY_MARKET",
+    marketParameters: null,
+    marketPeriod: "PRE_MATCH",
+    inRunning: false,
+    selectionIds: event.selectionId ? [event.selectionId] : [],
+    selectionLabels: event.selectionId ? [event.selectionId] : [],
+    marketProbabilities: typeof event.marketProbability === "number" ? [event.marketProbability] : [],
+    probabilityField: "STABLE_PRICE",
+    demarginingStatus: "VERIFIED_ALREADY_DEMARGINED",
+    messageId: event.eventId,
+    reasonCodes: ["REPLAY_EVENT", "NO_LOOKAHEAD"],
+  };
 }
 
 function liveState(runtime: LiveMarketBaselineRuntime, dataStatus: ReturnType<ProductRuntime["dataStatus"]>): DemoState {

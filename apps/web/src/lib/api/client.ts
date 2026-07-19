@@ -32,20 +32,51 @@ export type AgentStatus = {
   executionMode: "SHADOW";
   maker: {
     state: string;
-    latestAction: string | null;
+    latestAction: string;
     bid: number | null;
     ask: number | null;
     width: number | null;
     size: number | null;
     inventoryLean: number;
     quoteGuardRiskScore: number | null;
+    runId: string | null;
+    eventIndex: number;
+    sourceTimestamp: string | null;
+    currentMarketObservation: {
+      fixtureId: string;
+      marketId: string;
+      selectionId: string;
+      marketReference: number;
+      uncertainty: number;
+      volatility: number;
+      standardizedInnovation: number;
+    } | null;
+    activeQuote: {
+      bid: number;
+      ask: number;
+      width: number;
+      size: number;
+      createdAtEventIndex: number;
+      createdAtSourceTimestamp: string;
+      validThroughEventIndex: number;
+      fixtureId: string;
+      marketId: string;
+      selectionId: string;
+      status: "ACTIVE" | "CANCELLED" | "SUSPENDED";
+    } | null;
+    latestDecision: {
+      action: string;
+      decisionTimestamp: string;
+      decisionEventIndex: number;
+      reasonCodes: string[];
+    } | null;
     reasonCodes: string[];
   };
   hawk: {
     state: string;
     latestAction: string;
     signalType: string;
-    signalConfidence: number;
+    signalConfidence: number | null;
     paperPosition: number;
     labels: string[];
     reasonCodes: string[];
@@ -81,6 +112,21 @@ export type DecisionBook = {
   }>;
 };
 
+export type RuntimeSnapshot = {
+  runId: string | null;
+  eventIndex: number;
+  sourceTimestamp: string | null;
+  fixtureId: string | null;
+  marketId: string | null;
+  selectionId: string | null;
+  marketReference: number | null;
+  activeQuote: AgentStatus["maker"]["activeQuote"];
+  latestDecision: AgentStatus["maker"]["latestDecision"];
+  state: DemoState;
+  agentStatus: AgentStatus;
+  decisionBook: DecisionBook;
+};
+
 export type CurrentFixtureSample = {
   provenance: string;
   resultStatus: string;
@@ -108,6 +154,10 @@ export const demoApi = {
   decisionBook: () => request<DecisionBook>("/api/decision-book"),
   currentFixture: () => request<CurrentFixtureSample>("/api/fixtures/current"),
   state: () => request<DemoState>("/api/demo/state", undefined, (value) => DemoStateSchema.parse(value)),
+  snapshot: () => request<RuntimeSnapshot>("/api/runtime/snapshot", undefined, (value) => {
+    const snapshot = value as Omit<RuntimeSnapshot, "state"> & { state: unknown };
+    return { ...snapshot, state: DemoStateSchema.parse(snapshot.state) };
+  }),
   start: () => request<DemoState>("/api/demo/start", { method: "POST" }, (value) => DemoStateSchema.parse(value)),
   pause: () => request<DemoState>("/api/demo/pause", { method: "POST" }, (value) => DemoStateSchema.parse(value)),
   resume: () => request<DemoState>("/api/demo/resume", { method: "POST" }, (value) => DemoStateSchema.parse(value)),

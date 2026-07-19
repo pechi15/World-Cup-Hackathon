@@ -25,10 +25,11 @@ test("dashboard completes the maker-only replay lifecycle", async ({ page, reque
   const fillHistory = page.getByRole("heading", { name: "Maker Fill History" }).locator("..");
   const auditTrail = page.getByRole("heading", { name: "Audit Trail" }).locator("..");
   await expect(makerAgent).toContainText("PAPER EXECUTION");
-  await expect(makerAgent).toContainText("Latest action");
+  await expect(makerAgent).toContainText("LATEST DECISION");
   await expect(makerAgent).toContainText("Bid / Ask");
   await expect(makerAgent).toContainText("Inventory lean");
-  await expect(makerAgent).toContainText("QUOTING");
+  await expect(makerAgent).toContainText("IDLE");
+  await expect(makerAgent).toContainText("NONE");
   await expect(foragerAgent).toContainText("HEURISTIC SIGNAL");
   await expect(foragerAgent).toContainText("Paper position");
   await expect(foragerAgent).toContainText("Abstention reason");

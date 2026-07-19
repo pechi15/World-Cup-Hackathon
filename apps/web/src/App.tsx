@@ -11,20 +11,18 @@ const fmtNum = (value: number | null | undefined) => value == null ? "-" : value
 export function App() {
   const queryClient = useQueryClient();
   const stateQuery = useQuery({
-    queryKey: ["demo-state"],
-    queryFn: demoApi.state,
+    queryKey: ["runtime-snapshot"],
+    queryFn: demoApi.snapshot,
     refetchInterval: 800,
     retry: 1,
   });
   const healthQuery = useQuery({ queryKey: ["system-health"], queryFn: demoApi.health, refetchInterval: 5_000, retry: false });
   const tradingQuery = useQuery({ queryKey: ["trading-status"], queryFn: demoApi.tradingStatus, refetchInterval: 5_000, retry: false });
-  const agentQuery = useQuery({ queryKey: ["agent-status"], queryFn: demoApi.agentStatus, refetchInterval: 1_000, retry: false });
-  const decisionsQuery = useQuery({ queryKey: ["decision-book"], queryFn: demoApi.decisionBook, refetchInterval: 1_000, retry: false });
   const fixtureQuery = useQuery({ queryKey: ["current-fixture"], queryFn: demoApi.currentFixture, retry: false });
   const replaysQuery = useQuery({ queryKey: ["demo-replays"], queryFn: demoApi.replays, retry: 1 });
   const action = (fn: () => Promise<DemoState>) => useMutation({
     mutationFn: fn,
-    onSuccess: (state) => queryClient.setQueryData(["demo-state"], state),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["runtime-snapshot"] }),
   });
   const start = action(demoApi.start);
   const pause = action(demoApi.pause);
@@ -34,28 +32,31 @@ export function App() {
   const shock = action(demoApi.injectShock);
   const speed = useMutation({
     mutationFn: demoApi.speed,
-    onSuccess: (state) => queryClient.setQueryData(["demo-state"], state),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["runtime-snapshot"] }),
   });
   const selectReplay = useMutation({
     mutationFn: demoApi.selectReplay,
-    onSuccess: (state, replayId) => {
-      queryClient.setQueryData(["demo-state"], state);
+    onSuccess: (_state, replayId) => {
+      void queryClient.invalidateQueries({ queryKey: ["runtime-snapshot"] });
       queryClient.setQueryData(["demo-replays"], (current: typeof replaysQuery.data) => current ? { ...current, selected: replayId } : current);
     },
   });
 
   if (stateQuery.isLoading) return <Shell><StateMessage title="Loading demo" detail="Connecting to the replay backend." /></Shell>;
   if (stateQuery.isError) return <Shell><StateMessage title="Backend disconnected" detail={stateQuery.error.message} tone="danger" /></Shell>;
-  const state = stateQuery.data!;
+  const snapshot = stateQuery.data!;
+  const state = snapshot.state;
   const backendStatus = healthQuery.isError ? "DISCONNECTED" : healthQuery.data ? "CONNECTED" : "CHECKING";
   const txoddsStatus = healthQuery.data?.dataStatus.status ?? "UNAVAILABLE";
   const kellyLocked = tradingQuery.data?.kellyEnabled === false;
   const isBusy = start.isPending || pause.isPending || resume.isPending || reset.isPending || step.isPending || shock.isPending || speed.isPending || selectReplay.isPending;
-  const makerRow = state.marketRows.find((row) => row.status === "LIVE" && row.bid !== null && row.ask !== null) ?? state.marketRows[0];
-  const makerAgent = agentQuery.data?.maker;
-  const foragerAgent = agentQuery.data?.hawk;
-  const sharedRisk = agentQuery.data?.sharedRisk;
-  const decisions = decisionsQuery.data?.decisions ?? [];
+  const makerAgent = snapshot.agentStatus.maker;
+  const foragerAgent = snapshot.agentStatus.hawk;
+  const sharedRisk = snapshot.agentStatus.sharedRisk;
+  const decisions = snapshot.decisionBook.decisions ?? [];
+  const makerRow = state.marketRows.find((row) => row.marketId === snapshot.marketId && row.selectionId === snapshot.selectionId)
+    ?? state.marketRows.find((row) => row.status === "ACTIVE" && row.bid !== null && row.ask !== null)
+    ?? state.marketRows[0];
   const makerAction = makerAgent?.latestAction ?? state.audit.at(-1)?.finalAction ?? "WAITING_FOR_MARKET";
   const makerState = makerAgent?.state ?? tradingQuery.data?.maker ?? (makerRow?.status === "LIVE" ? "PAPER_ENABLED" : "WAITING");
   const freshnessState = state.dataFreshnessMs == null ? "NO DATA" : state.dataFreshnessMs > 5_000 ? "STALE" : "FRESH";
@@ -123,14 +124,18 @@ export function App() {
             </div>
             <span className="agent-state success">{makerState}</span>
           </div>
-          <p className="agent-fixture">{fixtureParticipants} · {fixtureQuery.data?.resultStatus ?? "STATUS PENDING"}</p>
+          <p className="agent-fixture">{makerRow?.fixture ?? fixtureParticipants} · {fixtureQuery.data?.resultStatus ?? "STATUS PENDING"}</p>
           <dl className="agent-metrics">
-            <div><dt>Latest action</dt><dd>{makerAction}</dd></div>
-            <div><dt>Bid / Ask</dt><dd>{fmtNum(makerAgent?.bid)} / {fmtNum(makerAgent?.ask)}</dd></div>
-            <div><dt>Width</dt><dd>{fmtNum(makerAgent?.width)}</dd></div>
-            <div><dt>Size</dt><dd>{fmtNum(makerAgent?.size)}</dd></div>
+            <div className="metric-span"><dt>ACTIVE QUOTE</dt><dd>{makerAgent.activeQuote?.status ?? "NONE"}</dd></div>
+            <div><dt>Bid / Ask</dt><dd>{fmtNum(makerAgent.activeQuote?.bid)} / {fmtNum(makerAgent.activeQuote?.ask)}</dd></div>
+            <div><dt>Width</dt><dd>{fmtNum(makerAgent.activeQuote?.width)}</dd></div>
+            <div><dt>Size</dt><dd>{fmtNum(makerAgent.activeQuote?.size)}</dd></div>
+            <div><dt>Quote created</dt><dd>{makerAgent.activeQuote ? `Event ${makerAgent.activeQuote.createdAtEventIndex}` : "-"}</dd></div>
+            <div><dt>Current replay event</dt><dd>{snapshot.eventIndex}</dd></div>
+            <div className="metric-span"><dt>LATEST DECISION</dt><dd>{makerAction} · Event {makerAgent.latestDecision?.decisionEventIndex ?? "-"}</dd></div>
             <div><dt>Inventory lean</dt><dd>{fmtNum(makerAgent?.inventoryLean)}</dd></div>
             <div><dt>Quote-risk score</dt><dd>{fmtNum(makerAgent?.quoteGuardRiskScore)}</dd></div>
+            <div className="metric-span"><dt>Reason codes</dt><dd>{makerAgent.latestDecision?.reasonCodes.join(" · ") ?? makerAgent.reasonCodes.join(" · ")}</dd></div>
           </dl>
         </article>
 
@@ -143,7 +148,7 @@ export function App() {
             </div>
             <span className="agent-state warning">{foragerAgent?.state ?? "STANDBY"}</span>
           </div>
-          <p className="agent-fixture">{fixtureParticipants} · HEURISTIC SIGNAL · NOT PROVEN ALPHA</p>
+          <p className="agent-fixture">{makerRow?.fixture ?? fixtureParticipants} · HEURISTIC SIGNAL · NOT PROVEN ALPHA</p>
           <dl className="agent-metrics">
             <div><dt>Latest signal</dt><dd>{foragerAgent?.signalType ?? "NONE"}</dd></div>
             <div><dt>Shadow action</dt><dd>{foragerAgent?.latestAction ?? "NO_TRADE"}</dd></div>
@@ -197,15 +202,19 @@ export function App() {
             </div>
             <aside className="quote-snapshot" aria-label="Latest quote">
               <div className="quote-pair">
-                <div><span>Bid</span><strong>{fmtNum(makerRow?.bid)}</strong></div>
-                <div><span>Ask</span><strong>{fmtNum(makerRow?.ask)}</strong></div>
+                <div><span>Bid</span><strong>{fmtNum(makerAgent.activeQuote?.bid)}</strong></div>
+                <div><span>Ask</span><strong>{fmtNum(makerAgent.activeQuote?.ask)}</strong></div>
               </div>
-              <Metric label="Width" value={fmtNum(makerRow?.width)} />
-              <Metric label="Size" value={`${fmtNum(makerRow?.bidSize)} / ${fmtNum(makerRow?.askSize)}`} />
+              <Metric label="Width" value={fmtNum(makerAgent.activeQuote?.width)} />
+              <Metric label="Size" value={fmtNum(makerAgent.activeQuote?.size)} />
+              <Metric label="Quote created" value={makerAgent.activeQuote ? `Event ${makerAgent.activeQuote.createdAtEventIndex}` : "-"} />
+              <Metric label="Current replay event" value={String(snapshot.eventIndex)} />
+              <Metric label="Source timestamp" value={snapshot.sourceTimestamp ?? "-"} />
+              <Metric label="Quote status" value={makerAgent.activeQuote?.status ?? "NONE"} />
               <Metric label="Inventory lean" value={fmtNum(makerRow?.inventoryLean)} />
               <Metric label="Quote-risk score" value={fmtNum(makerAgent?.quoteGuardRiskScore)} />
               <div className="latest-action"><span>Latest action</span><strong>{makerAction}</strong></div>
-              <div className="guard-label"><Gauge size={15} /><span><b>Adaptive Quote Guard</b>Replay-trained market-risk model</span><em>{agentQuery.data?.quoteGuard.status ?? "PENDING"}</em></div>
+              <div className="guard-label"><Gauge size={15} /><span><b>Adaptive Quote Guard</b>Replay-trained market-risk model</span><em>{snapshot.agentStatus.quoteGuard.status ?? "PENDING"}</em></div>
             </aside>
           </div>
           <div className="markers">{state.chart.filter((point) => point.eventType).slice(-8).map((point) => <span key={`${point.index}-${point.eventType}`}>{point.eventType} #{point.index}</span>)}</div>

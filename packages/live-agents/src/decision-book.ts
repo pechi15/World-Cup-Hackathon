@@ -208,6 +208,10 @@ export class DecisionBook {
     return [...this.records.values()].map((record) => this.copy(record));
   }
 
+  clear(): void {
+    this.records.clear();
+  }
+
   cancelPendingQuotes(marketId: string, selectionId: string): DecisionRecord[] {
     const cancelled: DecisionRecord[] = [];
     for (const record of this.records.values()) {
@@ -331,6 +335,14 @@ export class ShadowExecutionEngine {
 
   position(marketId: string, selectionId: string): number {
     return this.positions.get(`${marketId}|${selectionId}`)?.quantity ?? 0;
+  }
+
+  reset(): void {
+    this.positions.clear();
+  }
+
+  positionCount(): number {
+    return [...this.positions.values()].filter((position) => position.quantity !== 0).length;
   }
 
   grossExposure(): number {

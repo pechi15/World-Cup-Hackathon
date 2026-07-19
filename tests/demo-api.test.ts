@@ -26,6 +26,20 @@ async function post(path: string, body?: unknown) {
 }
 
 describe("demo API", () => {
+  it("keeps all status GETs read-only before playback", async () => {
+    await post("/api/demo/reset");
+    const before = await fetch(`${baseUrl}/api/runtime/snapshot`).then((res) => res.json());
+    for (const path of ["/api/txodds/status", "/api/agent/status", "/api/trading/status", "/api/demo/status", "/api/demo/state", "/api/runtime/snapshot"]) {
+      expect((await fetch(`${baseUrl}${path}`)).ok).toBe(true);
+    }
+    const after = await fetch(`${baseUrl}/api/runtime/snapshot`).then((res) => res.json());
+    expect(after.eventIndex).toBe(0);
+    expect(after.runId).toBe(before.runId);
+    expect(after.activeQuote).toBeNull();
+    expect(after.agentStatus.maker).toMatchObject({ latestAction: "NONE", bid: null, ask: null });
+    expect(after.decisionBook.decisionCount).toBe(0);
+  });
+
   it("serves readiness and state", async () => {
     const ready = await fetch(`${baseUrl}/ready`).then((res) => res.json());
     expect(ready.ready).toBe(true);

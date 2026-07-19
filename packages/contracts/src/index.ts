@@ -392,6 +392,10 @@ export const DemoChartPointSchema = z.object({
   theoProbability: z.number().min(0).max(1).nullable(),
   bid: z.number().min(0).max(1).nullable(),
   ask: z.number().min(0).max(1).nullable(),
+  fixtureId: z.string().optional(),
+  marketId: z.string().optional(),
+  selectionId: z.string().optional(),
+  sourceTimestamp: z.string().datetime().optional(),
   eventType: DemoEventTypeSchema.optional(),
 });
 export type DemoChartPoint = z.infer<typeof DemoChartPointSchema>;

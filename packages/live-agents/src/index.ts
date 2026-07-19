@@ -18,8 +18,8 @@ export * from "./decision-book.js";
 export * from "./fixture-discovery.js";
 export * from "./quote-guard.js";
 
-export type MakerAction = "PLACE_QUOTES" | "REPLACE_QUOTES" | "WIDEN_QUOTES" | "REDUCE_SIZE" | "CANCEL_QUOTES" | "SUSPEND" | "RESUME";
-export type HawkAction = "MONITOR" | "FLAG_SIGNAL" | "OPEN_SHADOW_POSITION" | "REDUCE_SHADOW_POSITION" | "CLOSE_SHADOW_POSITION" | "NO_TRADE";
+export type MakerAction = "NONE" | "PLACE_QUOTES" | "REPLACE_QUOTES" | "HOLD_QUOTES" | "WIDEN_QUOTES" | "REDUCE_SIZE" | "CANCEL_QUOTES" | "SUSPEND" | "RESUME";
+export type HawkAction = "NONE" | "MONITOR" | "FLAG_SIGNAL" | "OPEN_SHADOW_POSITION" | "REDUCE_SHADOW_POSITION" | "CLOSE_SHADOW_POSITION" | "NO_TRADE";
 export type IndependentTheoInput = {
   probability: number;
   source: "INDEPENDENT_MODEL";
@@ -56,7 +56,7 @@ export type MakerStatus = PresentationFields & {
   displayName: "Maker Bee";
   technicalRole: "AUTONOMOUS_MARKET_MAKER";
   state: "IDLE" | "QUOTING" | "SUSPENDED";
-  latestAction: MakerAction | null;
+  latestAction: MakerAction;
   latestDecisionId: string | null;
   marketId: string | null;
   selectionId: string | null;
@@ -68,8 +68,44 @@ export type MakerStatus = PresentationFields & {
   size: number | null;
   inventoryLean: number;
   quoteGuardRiskScore: number | null;
+  quoteRiskScore: number | null;
+  runId: string | null;
+  eventIndex: number;
+  sourceTimestamp: string | null;
+  currentMarketObservation: {
+    fixtureId: string;
+    marketId: string;
+    selectionId: string;
+    marketReference: number;
+    uncertainty: number;
+    volatility: number;
+    standardizedInnovation: number;
+  } | null;
+  activeQuote: {
+    bid: number;
+    ask: number;
+    width: number;
+    size: number;
+    createdAtEventIndex: number;
+    createdAtSourceTimestamp: string;
+    validThroughEventIndex: number;
+    fixtureId: string;
+    marketId: string;
+    selectionId: string;
+    status: "ACTIVE" | "CANCELLED" | "SUSPENDED";
+  } | null;
+  latestDecision: {
+    action: MakerAction;
+    decisionTimestamp: string;
+    decisionEventIndex: number;
+    reasonCodes: string[];
+    previousQuote: MakerStatus["activeQuote"];
+    resultingQuote: MakerStatus["activeQuote"];
+  } | null;
   reasonCodes: string[];
 };
+
+export type AgentEventContext = { runId: string; eventIndex: number; provenance?: string };
 
 export type HawkStatus = PresentationFields & {
   agent: "HawkAgent";
@@ -77,11 +113,11 @@ export type HawkStatus = PresentationFields & {
   displayName: "Forager Bee";
   agentType: "RELATIVE_VALUE_SCOUT";
   technicalRole: "RELATIVE_VALUE_SCOUT";
-  state: "MONITORING" | "SIGNAL_FLAGGED" | "SHADOW_POSITION";
+  state: "READY" | "MONITORING" | "SIGNAL_FLAGGED" | "SHADOW_POSITION";
   latestAction: HawkAction;
   latestDecisionId: string | null;
   signalType: "NONE" | "INDEPENDENT_THEO" | "RELATIVE_VALUE_SIGNAL" | "MOVEMENT_SIGNAL" | "CROSS_MARKET_DISLOCATION";
-  signalConfidence: number;
+  signalConfidence: number | null;
   edge: number | null;
   paperPosition: number;
   labels: string[];
@@ -166,6 +202,18 @@ export class SharedPaperExecutionRisk {
     this.controls = { ...this.controls, ...update };
   }
 
+  reset(): void {
+    this.controls = {
+      manualKillSwitch: false,
+      latencyKillSwitch: false,
+      staleDataKillSwitch: false,
+      sequenceGapKillSwitch: false,
+      currentDrawdown: 0,
+    };
+    this.decisionBook.clear();
+    this.shadowExecution.reset();
+  }
+
   processMarketEvent(event: ExecutableMarketEvent): DecisionRecord[] {
     return this.shadowExecution.processMarketEvent(event);
   }
@@ -175,6 +223,7 @@ export class SharedPaperExecutionRisk {
   }
 
   status() {
+    const killed = this.isKilled();
     return {
       displayName: "Hive Risk Engine",
       technicalRole: "SHARED_SHADOW_RISK_CONTROL",
@@ -187,6 +236,10 @@ export class SharedPaperExecutionRisk {
       inventoryLimit: this.limits.maxPositionPerSelection,
       worstCaseLossLimit: this.limits.maxWorstCaseLoss,
       drawdownLimit: this.limits.maxDailyDrawdown,
+      state: killed ? "HALTED" : "ARMED",
+      exposure: this.grossExposure(),
+      drawdown: this.controls.currentDrawdown,
+      killSwitch: killed ? "ON" : "OFF",
       grossExposure: this.grossExposure(),
       remainingCapacity: this.capacity(),
       killSwitches: {
@@ -228,11 +281,11 @@ const makerPresentation = {
   executionMode: "SHADOW" as const,
 };
 
-export class MakerAgent {
-  private latest: MakerStatus = {
+function initialMakerStatus(runId: string | null = null): MakerStatus {
+  return {
     ...makerPresentation,
     state: "IDLE",
-    latestAction: null,
+    latestAction: "NONE",
     latestDecisionId: null,
     marketId: null,
     selectionId: null,
@@ -244,14 +297,31 @@ export class MakerAgent {
     size: null,
     inventoryLean: 0,
     quoteGuardRiskScore: null,
-    reasonCodes: ["AWAITING_MARKET_OBSERVATION"],
+    quoteRiskScore: null,
+    runId,
+    eventIndex: 0,
+    sourceTimestamp: null,
+    currentMarketObservation: null,
+    activeQuote: null,
+    latestDecision: null,
+    reasonCodes: ["WAITING_FOR_FIRST_MARKET_EVENT"],
   };
+}
+
+export class MakerAgent {
+  private latest: MakerStatus = initialMakerStatus();
   private readonly previous = new Map<string, MakerStatus>();
   private suspended = false;
 
   constructor(private readonly shared: SharedPaperExecutionRisk) {}
 
-  onObservation(observation: AgentObservation, guard: QuoteGuardLookup): MakerStatus {
+  reset(runId: string | null = null): void {
+    this.latest = initialMakerStatus(runId);
+    this.previous.clear();
+    this.suspended = false;
+  }
+
+  onObservation(observation: AgentObservation, guard: QuoteGuardLookup, context: AgentEventContext = { runId: "live", eventIndex: 0 }): MakerStatus {
     const key = `${observation.marketId}|${observation.selectionId}`;
     const prior = this.previous.get(key);
     const guardAction = guard.available ? guard.row.recommendedAction : null;
@@ -259,6 +329,8 @@ export class MakerAgent {
     if (!risk.accepted || guardAction === "SUSPEND" || guardAction === "HOLD_SUSPENDED") this.suspended = true;
     if (guardAction === "RESUME" && risk.accepted) this.suspended = false;
     if (this.suspended) {
+      const previousQuote = prior?.activeQuote ?? null;
+      const reasons = [...guard.reasonCodes, ...risk.reasonCodes, risk.accepted ? "QUOTE_GUARD_PAPER_SUSPENSION" : "HIVE_RISK_LIMIT_BLOCK"];
       this.latest = {
         ...makerPresentation,
         state: "SUSPENDED",
@@ -274,7 +346,21 @@ export class MakerAgent {
         size: null,
         inventoryLean: 0,
         quoteGuardRiskScore: guard.available ? guard.row.riskScore : null,
-        reasonCodes: [...guard.reasonCodes, ...risk.reasonCodes, risk.accepted ? "QUOTE_GUARD_PAPER_SUSPENSION" : "HIVE_RISK_LIMIT_BLOCK"],
+        quoteRiskScore: guard.available ? guard.row.riskScore : null,
+        runId: context.runId,
+        eventIndex: context.eventIndex,
+        sourceTimestamp: observation.timestamp,
+        currentMarketObservation: marketObservation(observation),
+        activeQuote: previousQuote ? { ...previousQuote, validThroughEventIndex: context.eventIndex, status: "SUSPENDED" } : null,
+        latestDecision: {
+          action: guardAction === "SUSPEND" || guardAction === "HOLD_SUSPENDED" ? "SUSPEND" : "CANCEL_QUOTES",
+          decisionTimestamp: observation.timestamp,
+          decisionEventIndex: context.eventIndex,
+          reasonCodes: reasons,
+          previousQuote,
+          resultingQuote: null,
+        },
+        reasonCodes: reasons,
       };
       this.previous.set(key, this.latest);
       return this.status();
@@ -305,6 +391,44 @@ export class MakerAgent {
     if (guardAction === "RESUME") latestAction = "RESUME";
     else if (guard.available && widthMultiplier > 1) latestAction = "WIDEN_QUOTES";
     else if (guard.available && sizeMultiplier < 1) latestAction = "REDUCE_SIZE";
+    const proposedQuote: NonNullable<MakerStatus["activeQuote"]> = {
+      bid: round(bid),
+      ask: round(ask),
+      width: round(ask - bid),
+      size: round(size),
+      createdAtEventIndex: context.eventIndex,
+      createdAtSourceTimestamp: observation.timestamp,
+      validThroughEventIndex: context.eventIndex,
+      fixtureId: observation.fixtureId,
+      marketId: observation.marketId,
+      selectionId: observation.selectionId,
+      status: "ACTIVE",
+    };
+    const priorQuote = prior?.activeQuote ?? null;
+    const ordinaryReplacement = latestAction === "REPLACE_QUOTES";
+    const materiallyChanged = !priorQuote
+      || Math.abs(priorQuote.bid - proposedQuote.bid) >= 0.002
+      || Math.abs(priorQuote.ask - proposedQuote.ask) >= 0.002
+      || Math.abs(priorQuote.width - proposedQuote.width) >= 0.002
+      || Math.abs(priorQuote.size - proposedQuote.size) >= 0.5;
+    if (ordinaryReplacement && !materiallyChanged) latestAction = "HOLD_QUOTES";
+    const activeQuote = latestAction === "HOLD_QUOTES"
+      ? { ...priorQuote!, validThroughEventIndex: context.eventIndex }
+      : proposedQuote;
+    const reasons = [
+      latestAction === "HOLD_QUOTES" ? "REPLACEMENT_THRESHOLD_NOT_MET" : prior ? "MARKET_REFERENCE_MOVED" : "FIRST_MARKET_EVENT",
+      "MARKET_CONSENSUS_QUOTE_CENTRE",
+      "STATE_SPACE_UNCERTAINTY_INPUT",
+      "VOLATILITY_INPUT",
+      "INVENTORY_LEAN_APPLIED",
+      "LATENCY_AND_STALENESS_INPUT",
+      "HIVE_RISK_LIMITS_APPLIED",
+      "SHADOW_EXECUTION",
+      "REAL_FUNDS_DISABLED",
+      "DIRECTIONAL_TRADING_DISABLED",
+      "KELLY_DISABLED",
+      ...guard.reasonCodes,
+    ];
     this.latest = {
       ...makerPresentation,
       state: "QUOTING",
@@ -313,26 +437,28 @@ export class MakerAgent {
       marketId: observation.marketId,
       selectionId: observation.selectionId,
       marketConsensusCentre: observation.marketProbability,
-      quoteCentre: round(quoteCentre),
-      bid: round(bid),
-      ask: round(ask),
-      width: round(ask - bid),
-      size: round(size),
+      quoteCentre: latestAction === "HOLD_QUOTES" ? prior!.quoteCentre : round(quoteCentre),
+      bid: activeQuote.bid,
+      ask: activeQuote.ask,
+      width: activeQuote.width,
+      size: activeQuote.size,
       inventoryLean: round(inventoryLean),
       quoteGuardRiskScore: guard.available ? guard.row.riskScore : null,
-      reasonCodes: [
-        "MARKET_CONSENSUS_QUOTE_CENTRE",
-        "STATE_SPACE_UNCERTAINTY_INPUT",
-        "VOLATILITY_INPUT",
-        "INVENTORY_LEAN_APPLIED",
-        "LATENCY_AND_STALENESS_INPUT",
-        "HIVE_RISK_LIMITS_APPLIED",
-        "SHADOW_EXECUTION",
-        "REAL_FUNDS_DISABLED",
-        "DIRECTIONAL_TRADING_DISABLED",
-        "KELLY_DISABLED",
-        ...guard.reasonCodes,
-      ],
+      quoteRiskScore: guard.available ? guard.row.riskScore : null,
+      runId: context.runId,
+      eventIndex: context.eventIndex,
+      sourceTimestamp: observation.timestamp,
+      currentMarketObservation: marketObservation(observation),
+      activeQuote,
+      latestDecision: {
+        action: latestAction,
+        decisionTimestamp: observation.timestamp,
+        decisionEventIndex: context.eventIndex,
+        reasonCodes: reasons,
+        previousQuote: priorQuote,
+        resultingQuote: activeQuote,
+      },
+      reasonCodes: reasons,
     };
     this.previous.set(key, this.latest);
     return this.status();
@@ -366,6 +492,33 @@ const hawkPresentation = {
   executionMode: "SHADOW" as const,
 };
 
+function initialHawkStatus(): HawkStatus {
+  return {
+    ...hawkPresentation,
+    state: "READY",
+    latestAction: "NONE",
+    latestDecisionId: null,
+    signalType: "NONE",
+    signalConfidence: null,
+    edge: null,
+    paperPosition: 0,
+    labels: [...foragerLabels],
+    reasonCodes: ["WAITING_FOR_FIRST_MARKET_EVENT"],
+  };
+}
+
+function marketObservation(observation: AgentObservation): NonNullable<MakerStatus["currentMarketObservation"]> {
+  return {
+    fixtureId: observation.fixtureId,
+    marketId: observation.marketId,
+    selectionId: observation.selectionId,
+    marketReference: observation.marketProbability,
+    uncertainty: observation.uncertainty,
+    volatility: observation.volatility,
+    standardizedInnovation: observation.standardizedInnovation,
+  };
+}
+
 export type HawkHeuristicConfig = {
   innovationThreshold: number;
   persistentUpdates: number;
@@ -381,20 +534,13 @@ const defaultHawkConfig: HawkHeuristicConfig = {
 };
 
 export class HawkAgent {
-  private latest: HawkStatus = {
-    ...hawkPresentation,
-    state: "MONITORING",
-    latestAction: "NO_TRADE",
-    latestDecisionId: null,
-    signalType: "NONE",
-    signalConfidence: 0,
-    edge: null,
-    paperPosition: 0,
-    labels: [...foragerLabels],
-    reasonCodes: ["INDEPENDENT_THEO_UNAVAILABLE"],
-  };
+  private latest: HawkStatus = initialHawkStatus();
 
   constructor(private readonly shared: SharedPaperExecutionRisk, private readonly config: HawkHeuristicConfig = defaultHawkConfig) {}
+
+  reset(): void {
+    this.latest = initialHawkStatus();
+  }
 
   monitorLive(observation: AgentObservation, independentTheo: IndependentTheoInput | null = null): HawkStatus {
     const comparable = observation.comparableMarket;
@@ -607,6 +753,14 @@ export class DualStrategyController {
     this.hawk = new HawkAgent(this.shared);
   }
 
+  reset(runId: string | null = null): void {
+    this.features.clear();
+    this.audit.length = 0;
+    this.shared.reset();
+    this.maker.reset(runId);
+    this.hawk.reset();
+  }
+
   private observation(event: SanitizedMarketEvent, selectionIndex: number): { observation: AgentObservation; movements: number[] } {
     const selectionId = event.selectionIds[selectionIndex]!;
     const probability = event.marketProbabilities[selectionIndex]!;
@@ -642,8 +796,13 @@ export class DualStrategyController {
     };
   }
 
-  ingest(event: SanitizedMarketEvent, mode: "LIVE" | "REPLAY", _market?: MarketDefinition): void {
-    const provenance = mode === "REPLAY" ? "RECORDED_TXODDS_REPLAY" : "SANITIZED_TXODDS";
+  ingest(
+    event: SanitizedMarketEvent,
+    mode: "LIVE" | "REPLAY",
+    _market?: MarketDefinition,
+    context: AgentEventContext = { runId: mode === "REPLAY" ? "replay" : "live", eventIndex: this.audit.length + 1 },
+  ): void {
+    const provenance = context.provenance ?? (mode === "REPLAY" ? "RECORDED_TXODDS_REPLAY" : "SANITIZED_TXODDS");
     for (let selectionIndex = 0; selectionIndex < event.selectionIds.length; selectionIndex += 1) {
       const next = this.observation(event, selectionIndex);
       const sourceEventId = `${event.messageId ?? event.timestamp}|${event.marketId}|${next.observation.selectionId}`;
@@ -661,7 +820,7 @@ export class DualStrategyController {
       const fills = this.shared.processMarketEvent(executable);
       this.hawk.refreshPosition(event.marketId, next.observation.selectionId);
       const guard = this.quoteGuard.lookup(next.observation);
-      const maker = this.maker.onObservation(next.observation, guard);
+      const maker = this.maker.onObservation(next.observation, guard, context);
       this.recordMakerDecision(maker, next.observation, sourceEventId, provenance);
       const hawk = this.hawk.onMovementHeuristic({
         observation: next.observation,
@@ -756,6 +915,18 @@ export class DualStrategyController {
         proposedPrice: null,
         proposedSize: 0,
         status: "OPEN",
+      });
+      this.maker.setLatestDecision(decision.decisionId);
+      return;
+    }
+    if (status.latestAction === "HOLD_QUOTES") {
+      const decision = this.shared.decisionBook.record({
+        ...common,
+        action: "NO_TRADE",
+        side: "NONE",
+        proposedPrice: null,
+        proposedSize: 0,
+        status: "NO_TRADE",
       });
       this.maker.setLatestDecision(decision.decisionId);
       return;
