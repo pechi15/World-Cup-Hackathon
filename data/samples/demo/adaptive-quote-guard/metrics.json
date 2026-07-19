@@ -1,0 +1,40 @@
+{
+  "limitations": [
+    "The sanitized contract sample contains only twelve observations across three short series.",
+    "Metrics describe model fit and artifact mechanics, not alpha, profit, or execution performance.",
+    "Staleness and latency are available but constant at zero in this synchronized sample."
+  ],
+  "model": {
+    "aic": -120.839402459857,
+    "averageLogLikelihood": 8.701641769161,
+    "bic": -99.503509869185,
+    "components": 3,
+    "converged": true,
+    "convergenceStatus": "CONVERGED",
+    "covarianceType": "diag",
+    "iterations": 2,
+    "lowerBound": 8.701641769168,
+    "maxIterations": 500,
+    "nInit": 20,
+    "randomSeed": 1729,
+    "type": "GaussianMixture"
+  },
+  "observationCount": 12,
+  "regimeCounts": {
+    "QUIET": 3,
+    "SHOCK": 5,
+    "VOLATILE": 4
+  },
+  "schemaVersion": "1.0.0",
+  "timelineRowCount": 12,
+  "trainingRowCount": 12,
+  "validation": {
+    "noFutureLookahead": true,
+    "policyMultiplierFormulasExact": true,
+    "probabilitiesValid": true,
+    "resumeRequiresThreeFreshObservations": true,
+    "riskScoresBounded": true,
+    "shockRiskIntensityHigherThanQuiet": true,
+    "timestampsOrdered": true
+  }
+}
