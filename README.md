@@ -33,4 +33,4 @@ git diff --check
 
 The backend acquires and renews its guest JWT automatically. The activated TxODDS API token is backend-only; do not configure it in Vercel or expose it to browser code.
 
-Exact Railway/Vercel variables, smoke tests, and the recording command are in [docs/submission-deployment.md](docs/submission-deployment.md).
+Exact Railway/Vercel variables and smoke tests are in [docs/submission-deployment.md](docs/submission-deployment.md).

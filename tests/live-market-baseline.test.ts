@@ -1,6 +1,3 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { defaultRiskLimits } from "../apps/api/src/sample-data.js";
 import {
@@ -16,7 +13,6 @@ import {
   LiveMarketBaselineRuntime,
   resolveMarketBaselineRuntimeConfig,
 } from "../packages/live-market-baseline/src/index.js";
-import { SanitizedLiveRecorder } from "../packages/live-market-baseline/src/recorder.js";
 import { MarketBaselineTheoProvider } from "../packages/theo/src/index.js";
 import { NoTheoNoActionStrategy } from "../packages/strategies/src/index.js";
 
@@ -270,40 +266,5 @@ describe("maker-only lockouts and conservative paper execution", () => {
     expect(manual.activeQuotes()).toHaveLength(0);
     await manual.onObservation(observation(update("2", base + 20), base + 30).market, observation(update("2", base + 20), base + 30).observation);
     expect(manual.activeQuotes()).toHaveLength(0);
-  });
-});
-
-describe("sanitized live recording", () => {
-  it("removes API tokens, JWTs, authorization headers, wallet data, and signatures", async () => {
-    const root = await mkdtemp(join(tmpdir(), "market-baseline-recording-"));
-    try {
-      const recorder = new SanitizedLiveRecorder();
-      recorder.record("CONNECTION", {
-        status: "CONNECTED",
-        TXLINE_API_TOKEN: "secret-token",
-        guestJwt: "secret-jwt",
-        Authorization: "Bearer secret",
-        walletAddress: "wallet",
-        signature: "signature",
-      }, "2026-01-01T00:00:00.000Z");
-      const fixture = { FixtureId: 42, Participant1Id: 1, Participant2Id: 2 };
-      const odds = update("recording-1", Date.parse("2026-01-01T00:00:01.000Z"));
-      recorder.record("FIXTURE", fixture, "2026-01-01T00:00:00.000Z");
-      recorder.record("FIXTURE", fixture, "2026-01-01T00:00:01.000Z");
-      recorder.record("ODDS_SNAPSHOT", { update: odds, receiveTime: "2026-01-01T00:00:01.010Z" }, "2026-01-01T00:00:01.010Z");
-      recorder.record("ODDS_SNAPSHOT", { update: odds, receiveTime: "2026-01-01T00:00:01.020Z" }, "2026-01-01T00:00:01.020Z");
-      const paths = await recorder.write(root, "2026-01-01T00:00:00.000Z", "2026-01-01T00:05:00.000Z");
-      const output = `${await readFile(paths.recordingPath, "utf8")}\n${await readFile(paths.replayPath, "utf8")}`;
-      expect(output).not.toContain("secret-token");
-      expect(output).not.toContain("secret-jwt");
-      expect(output).not.toContain("Bearer secret");
-      expect(output).not.toContain("wallet");
-      expect(output).not.toContain("signature");
-      const replay = JSON.parse(await readFile(paths.replayPath, "utf8")) as { fixtures: unknown[]; updates: unknown[] };
-      expect(replay.fixtures).toHaveLength(1);
-      expect(replay.updates).toHaveLength(1);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
   });
 });

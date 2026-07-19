@@ -86,11 +86,3 @@ Never add the API token, guest JWT, RPC credential, wallet path, private key, au
 ## Paper execution contract
 
 Quotes activate only after `PAPER_EXECUTION_LATENCY_MS`, expire after `PAPER_QUOTE_EXPIRY_MS`, and fill only when a later observation crosses a resting quote. There are no same-tick, random, or hash-probability fills. Connection loss, stale data, excessive latency, sequence gaps, information shocks, drawdown, manual kill, and risk-limit suspension cancel or suppress quotes.
-
-Record a local sanitized live session with:
-
-```powershell
-npm.cmd run record:live-baseline
-```
-
-The command writes under ignored `.local/live-market-baseline/`. It strips API tokens, JWTs, authorization headers, wallet data, signatures, activation material, and secret paths. Commit only intentionally reviewed small sanitized replay fixtures.
