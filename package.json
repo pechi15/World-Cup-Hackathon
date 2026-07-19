@@ -3,12 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
-    "start": "tsx apps/api/src/server.ts",
+    "start": "tsx --env-file-if-exists=.env apps/api/src/server.ts",
     "dev": "npm-run-all --parallel dev:api dev:web",
-    "dev:api": "tsx apps/api/src/server.ts",
+    "dev:api": "tsx --env-file-if-exists=.env apps/api/src/server.ts",
     "dev:web": "vite --host 0.0.0.0 --config apps/web/vite.config.ts",
-    "demo": "tsx apps/api/src/server.ts",
+    "demo": "tsx --env-file-if-exists=.env apps/api/src/server.ts",
     "build": "tsc --noEmit && vite build --config apps/web/vite.config.ts",
     "backfill:txodds-history": "tsx scripts/backfill-txodds-history.ts",
     "typecheck": "tsc --noEmit",

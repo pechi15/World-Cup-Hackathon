@@ -3,8 +3,9 @@
 Run locally:
 
 ```powershell
-Set-Location "E:\Hackathons\World-Cup-demo"
-npm.cmd install
+Set-Location "E:\Hackathons\World-Cup-cursor-integration"
+Copy-Item .env.example .env
+npm.cmd ci
 npm.cmd run dev
 ```
 

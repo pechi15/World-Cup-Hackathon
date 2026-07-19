@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, AlertTriangle, BadgeCheck, Pause, Play, RotateCcw, Shield, StepForward, Zap } from "lucide-react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { DemoState } from "../../../packages/contracts/src/index";
-import { demoApi } from "./lib/api/client";
+import type { DemoState } from "../../../packages/contracts/src/index.js";
+import { demoApi } from "./lib/api/client.js";
 
 const fmtPct = (value: number | null | undefined) => value == null ? "Unavailable" : `${(value * 100).toFixed(1)}%`;
 const fmtMoney = (value: number) => `${value >= 0 ? "+" : "-"}$${Math.abs(value).toFixed(2)}`;

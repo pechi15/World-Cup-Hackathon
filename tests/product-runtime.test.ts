@@ -4,6 +4,7 @@ import {
   TxlineReadOnlyAdapter,
   type FetchLike,
 } from "../packages/market-data/src/index.js";
+import { ProductRuntime } from "../apps/api/src/product-runtime.js";
 
 function liveEnv(overrides: Record<string, string | undefined> = {}) {
   return {
@@ -49,6 +50,19 @@ describe("two-mode runtime configuration", () => {
     expect(config).toMatchObject({ valid: false, mode: "txline", status: "AWAITING_CREDENTIALS" });
     if (config.valid) throw new Error("expected invalid txline config");
     expect(config.reasonCodes).toContain("MISSING_TXLINE_API_TOKEN");
+  });
+
+  it("does not report maker pricing ready when market-baseline mode is disabled", () => {
+    const runtime = new ProductRuntime({
+      DATA_MODE: "replay",
+      DEMO_MODE: "true",
+      ENABLE_REAL_EXECUTION: "false",
+      ENABLE_WALLET_OPERATIONS: "false",
+      ENABLE_TXODDS_ACTIVATION: "false",
+    });
+    expect(runtime.baselineConfig).toMatchObject({ enabled: false, valid: true });
+    expect(runtime.theoStatus()).toMatchObject({ status: "UNAVAILABLE" });
+    expect(runtime.tradingStatus()).toMatchObject({ maker: "DISABLED" });
   });
 });
 

@@ -11,6 +11,8 @@ The state-space component is a market filter only. Directional actions are alway
 
 ## Local replay
 
+Requires Node.js 22.12 or newer.
+
 ```powershell
 Copy-Item .env.example .env
 npm.cmd ci

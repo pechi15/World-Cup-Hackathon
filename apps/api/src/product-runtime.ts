@@ -133,7 +133,7 @@ export class ProductRuntime {
   }
 
   theoStatus() {
-    if (!this.baselineConfig.valid) {
+    if (!this.baselineConfig.enabled || !this.baselineConfig.valid) {
       return {
         status: "UNAVAILABLE",
         provenance: "TXODDS_MARKET_BASELINE",
@@ -160,7 +160,9 @@ export class ProductRuntime {
   }
 
   tradingStatus() {
-    const available = this.baselineConfig.valid && (this.mode === "replay" || this.live?.status().trading.maker === "PAPER_ENABLED");
+    const available = this.baselineConfig.enabled
+      && this.baselineConfig.valid
+      && (this.mode === "replay" || this.live?.status().trading.maker === "PAPER_ENABLED");
     return {
       maker: available ? "PAPER_ENABLED" : "DISABLED",
       directional: "DISABLED_NON_INDEPENDENT_THEO",

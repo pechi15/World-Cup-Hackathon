@@ -54,9 +54,10 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
     });
   }
   if (req.method === "GET" && path === "/ready") {
+    const baselineReady = product.baselineConfig.enabled && product.baselineConfig.valid;
     const ready = product.mode === "replay"
-      ? product.baselineConfig.valid
-      : product.mode === "txline" && product.dataStatus().status === "CONNECTED" && product.baselineConfig.valid;
+      ? baselineReady
+      : product.mode === "txline" && product.dataStatus().status === "CONNECTED" && baselineReady;
     return send(req, res, ready ? 200 : 503, { ready, mode: product.mode, dataStatus: product.dataStatus(), reasonCodes: product.baselineConfig.reasonCodes });
   }
   if (req.method === "GET" && path === "/api/txodds/status") return send(req, res, 200, product.dataStatus());
