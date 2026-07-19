@@ -27,6 +27,8 @@ export class ProductRuntime {
   readonly live: LiveMarketBaselineRuntime | null;
   readonly adapter: TxlineReadOnlyAdapter | null;
   private readonly recordedReplay: DemoReplayInput | null;
+  private readonly liveFixtureLabel: string;
+  private readonly historicalFixtureLabel: string;
   private selectedReplay = "built-in";
   private abortController: AbortController | null = null;
   private startupError: string | null = null;
@@ -35,7 +37,13 @@ export class ProductRuntime {
     this.dataConfig = resolveDataRuntimeConfig(env);
     this.baselineConfig = resolveMarketBaselineRuntimeConfig(env);
     assertMarketBaselineStartupSafe(this.baselineConfig);
-    this.recordedReplay = loadRecordedReplay(env.REPLAY_FILE);
+    const historicalPath = env.REPLAY_FILE ?? "data/samples/txodds/replay/england-france-third-place.json";
+    this.recordedReplay = loadRecordedReplay(historicalPath);
+    this.liveFixtureLabel = loadFixtureLabel(
+      env.CURRENT_FIXTURE_FILE ?? "data/samples/txodds/current/argentina-spain.json",
+      "Live",
+    ) ?? "Live fixture unavailable";
+    this.historicalFixtureLabel = loadFixtureLabel(historicalPath, "Historical") ?? "Historical replay unavailable";
     this.demo = new DemoReplayEngine("replay", true);
     if (this.dataConfig.valid && this.dataConfig.mode === "txline") {
       this.adapter = new TxlineReadOnlyAdapter(this.dataConfig);
@@ -84,10 +92,11 @@ export class ProductRuntime {
 
   replays() {
     return {
-      selected: this.selectedReplay,
+      selected: this.mode === "txline" ? "live-current" : this.selectedReplay,
       options: [
-        { id: "built-in", label: "Built-in deterministic replay", available: true },
-        { id: "recorded-txodds", label: this.recordedReplay?.fixtureLabel ?? "Recorded TxODDS historical replay", available: this.recordedReplay !== null },
+        { id: "live-current", label: this.liveFixtureLabel, available: this.mode === "txline", sourceType: "LIVE_TXODDS" },
+        { id: "historical-recorded", label: this.historicalFixtureLabel, available: this.mode === "replay" && this.recordedReplay !== null, sourceType: "RECORDED_TXODDS_REPLAY" },
+        { id: "built-in", label: "Built-in deterministic fallback", available: this.mode === "replay", sourceType: "DETERMINISTIC_REPLAY" },
       ],
     };
   }
@@ -99,12 +108,13 @@ export class ProductRuntime {
       this.demo = new DemoReplayEngine("replay", true);
       return this.demo.getState();
     }
-    if (replayId === "recorded-txodds" && this.recordedReplay) {
-      this.selectedReplay = replayId;
+    if ((replayId === "historical-recorded" || replayId === "recorded-txodds") && this.recordedReplay) {
+      this.selectedReplay = "historical-recorded";
       this.demo = new DemoReplayEngine("replay", true, this.recordedReplay);
       return this.demo.getState();
     }
-    throw new Error(replayId === "recorded-txodds" ? "RECORDED_REPLAY_UNAVAILABLE" : "UNKNOWN_REPLAY");
+    if (replayId === "live-current") throw new Error("LIVE_SOURCE_REQUIRES_TXLINE_MODE");
+    throw new Error(replayId === "historical-recorded" || replayId === "recorded-txodds" ? "RECORDED_REPLAY_UNAVAILABLE" : "UNKNOWN_REPLAY");
   }
 
   private async onEvent(event: NormalizedEvent): Promise<void> {
@@ -118,7 +128,7 @@ export class ProductRuntime {
     if (this.dataConfig.mode === "replay") {
       return {
         status: "CONNECTED",
-        display: this.selectedReplay === "recorded-txodds" ? "Sanitized recorded TxODDS historical replay" : "Deterministic sanitized replay",
+        display: this.selectedReplay === "historical-recorded" ? "Sanitized recorded TxODDS historical replay" : "Deterministic sanitized replay",
         mode: "replay",
         network: "local",
         readOnly: true,
@@ -308,6 +318,25 @@ type RecordedReplayFile = {
   oddsRecords?: Array<{ update?: TxlineOddsUpdate; receiveTime?: string }>;
   updates?: TxlineOddsUpdate[];
 };
+
+function loadFixtureLabel(configuredPath: string, prefix: "Live" | "Historical"): string | null {
+  const fixturePath = path.resolve(configuredPath);
+  if (!existsSync(fixturePath)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(fixturePath, "utf8")) as { fixture?: Record<string, unknown> };
+    const fixture = parsed.fixture;
+    if (!fixture) return null;
+    const participants = [
+      fixture.participant1 ?? fixture.Participant1,
+      fixture.participant2 ?? fixture.Participant2,
+    ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+    if (participants.length !== 2) return null;
+    participants.sort((left, right) => left.localeCompare(right));
+    return `${prefix} ${participants[0]}–${participants[1]}`;
+  } catch {
+    return null;
+  }
+}
 
 function loadRecordedReplay(configuredPath: string | undefined): DemoReplayInput | null {
   const replayPath = path.resolve(configuredPath ?? "data/samples/txodds/replay/recorded-historical-replay.json");

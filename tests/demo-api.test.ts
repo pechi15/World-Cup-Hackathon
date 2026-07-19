@@ -67,12 +67,14 @@ describe("demo API", () => {
     }
   });
 
-  it("selects the sanitized recorded TxODDS replay without affecting the built-in fallback", async () => {
+  it("offers truthful live, historical, and deterministic sources", async () => {
     const replays = await fetch(`${baseUrl}/api/demo/replays`).then((res) => res.json());
-    expect(replays.options).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: "recorded-txodds", available: true }),
-    ]));
-    const recorded = await post("/api/demo/replay", { replayId: "recorded-txodds" });
+    expect(replays.options).toEqual([
+      expect.objectContaining({ id: "live-current", label: "Live Argentina–Spain", available: false, sourceType: "LIVE_TXODDS" }),
+      expect.objectContaining({ id: "historical-recorded", label: "Historical England–France", available: true, sourceType: "RECORDED_TXODDS_REPLAY" }),
+      expect.objectContaining({ id: "built-in", label: "Built-in deterministic fallback", available: true, sourceType: "DETERMINISTIC_REPLAY" }),
+    ]);
+    const recorded = await post("/api/demo/replay", { replayId: "historical-recorded" });
     expect(recorded.dataSource).toBe("RECORDED_TXODDS_HISTORICAL_REPLAY");
     expect(recorded.totalEvents).toBeGreaterThan(0);
     const started = await post("/api/demo/start");

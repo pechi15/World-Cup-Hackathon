@@ -8,16 +8,17 @@ test("dashboard completes the maker-only replay lifecycle", async ({ page, reque
   });
   page.on("pageerror", (error) => browserErrors.push(error.message));
 
-  const ready = await request.get("http://127.0.0.1:8787/ready");
+  const ready = await request.get(process.env.DEMO_API_URL ?? "http://127.0.0.1:8790/ready");
   expect(ready.ok()).toBe(true);
   await expect(ready.json()).resolves.toMatchObject({ ready: true, mode: "replay" });
 
-  await page.goto(process.env.DEMO_WEB_URL ?? "http://localhost:5173");
+  await page.goto(process.env.DEMO_WEB_URL ?? "http://127.0.0.1:5174");
   await expect(page.getByRole("heading", { name: "World Cup market-consensus market maker" })).toBeVisible();
   await expect(page.locator(".status-bar")).toContainText("CONNECTED");
 
   const marketBoard = page.getByRole("heading", { name: "Market Board" }).locator("..");
-  const makerAgent = page.getByRole("heading", { name: "Maker Agent" }).locator("..");
+  const makerAgent = page.locator(".maker-agent");
+  const foragerAgent = page.locator(".forager-agent");
   const positions = page.getByRole("heading", { name: "Positions" }).locator("..");
   const riskSheet = page.getByRole("heading", { name: "Risk Sheet" }).locator("..");
   const performance = page.getByRole("heading", { name: "Performance" }).locator("..");
@@ -27,7 +28,15 @@ test("dashboard completes the maker-only replay lifecycle", async ({ page, reque
   await expect(makerAgent).toContainText("Latest action");
   await expect(makerAgent).toContainText("Bid / Ask");
   await expect(makerAgent).toContainText("Inventory lean");
-  const initialMaker = await makerAgent.textContent();
+  await expect(makerAgent).toContainText("QUOTING");
+  await expect(foragerAgent).toContainText("HEURISTIC SIGNAL");
+  await expect(foragerAgent).toContainText("Paper position");
+  await expect(foragerAgent).toContainText("Abstention reason");
+  const replaySources = page.getByLabel("Replay source");
+  await expect(replaySources.locator("option")).toHaveCount(3);
+  await expect(replaySources).toContainText("Live Argentina–Spain (unavailable)");
+  await expect(replaySources).toContainText("Historical England–France");
+  await expect(replaySources).toContainText("Built-in deterministic fallback");
   const initialRisk = await riskSheet.textContent();
   const initialPerformance = await performance.textContent();
 
@@ -48,8 +57,7 @@ test("dashboard completes the maker-only replay lifecycle", async ({ page, reque
   await expect(marketBoard).toContainText("LIVE");
   await expect(fillHistory).not.toContainText("Zero fills");
   await expect(auditTrail).toContainText("PAPER_MAKER_FILL");
-  await expect(makerAgent).toContainText("PAPER_ENABLED");
-  expect(await makerAgent.textContent()).not.toBe(initialMaker);
+  await expect(makerAgent).toContainText("QUOTING");
   expect(await riskSheet.textContent()).not.toBe(initialRisk);
   expect(await performance.textContent()).not.toBe(initialPerformance);
 
