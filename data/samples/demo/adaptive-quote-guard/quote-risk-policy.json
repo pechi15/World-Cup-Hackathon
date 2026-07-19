@@ -1,0 +1,44 @@
+{
+  "allowedEffects": [
+    "WIDTH_MULTIPLIER",
+    "SIZE_MULTIPLIER",
+    "PAPER_QUOTE_SUSPENSION",
+    "CONTROLLED_RESUMPTION"
+  ],
+  "controlledResumption": {
+    "freshObservationsBelowDefensiveThresholdRequired": 3,
+    "maximumLatencySeconds": 5.0,
+    "maximumStalenessSeconds": 5.0,
+    "resetCountWhenObservationIsNotFreshOrNotBelowThreshold": true
+  },
+  "forbiddenEffects": [
+    "MARKET_QUOTE_CENTRE",
+    "DIRECTIONAL_TRADING",
+    "KELLY_SIZING",
+    "MATCH_OUTCOME_PROBABILITIES",
+    "REAL_EXECUTION"
+  ],
+  "labels": [
+    "SANITIZED_TXODDS",
+    "REPLAY_TRAINED_QUOTE_GUARD",
+    "NOT_PROVEN_ALPHA",
+    "PAPER_ONLY"
+  ],
+  "paperOnly": true,
+  "provenance": "SANITIZED_TXODDS",
+  "schemaVersion": "1.0.0",
+  "sizeMultiplier": {
+    "formula": "max(0.15, (1 - riskScore)^2)",
+    "maximum": 1.0,
+    "minimum": 0.15
+  },
+  "thresholds": {
+    "defensiveRiskScore": 0.55,
+    "suspendRiskScore": 0.8
+  },
+  "widthMultiplier": {
+    "formula": "1 + 1.75 * riskScore",
+    "maximum": 2.75,
+    "minimum": 1.0
+  }
+}

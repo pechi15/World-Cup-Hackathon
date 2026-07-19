@@ -28,6 +28,12 @@ import {
   LiveMarketBaselineRuntime,
   resolveMarketBaselineRuntimeConfig,
 } from "../../../packages/live-market-baseline/src/index.js";
+import {
+  DualStrategyController,
+  loadAdaptiveQuoteGuard,
+  sanitizeMarketUpdate,
+  type SanitizedMarketEvent,
+} from "../../../packages/live-agents/src/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 8787);
@@ -70,6 +76,20 @@ let riskLimits = { ...defaultRiskLimits };
 let portfolio = markPortfolio(createEmptyPortfolio(), marketPrices);
 let orders: Order[] = [];
 let fills: Fill[] = [];
+const backendRoot = path.resolve(__dirname, "../../..");
+const currentFixtureSample = JSON.parse(fs.readFileSync(
+  path.join(backendRoot, "data", "samples", "txodds", "current", "argentina-spain.json"),
+  "utf8",
+)) as Record<string, unknown> & { marketSnapshots: SanitizedMarketEvent[] };
+const historicalReplaySample = JSON.parse(fs.readFileSync(
+  path.join(backendRoot, "data", "samples", "txodds", "replay", "england-france-third-place.json"),
+  "utf8",
+)) as Record<string, unknown> & { marketEvents: SanitizedMarketEvent[] };
+const adaptiveQuoteGuard = loadAdaptiveQuoteGuard(
+  path.join(backendRoot, "data", "samples", "demo", "adaptive-quote-guard"),
+);
+const makerHawkController = new DualStrategyController(adaptiveQuoteGuard, riskLimits);
+for (const event of currentFixtureSample.marketSnapshots) makerHawkController.ingest(event, "LIVE");
 const strategies = [
   { strategyId: "no-theo-no-action", enabled: false, status: "THEO_UNAVAILABLE" },
   { strategyId: "autonomous-maker", enabled: useReplayTheo || Boolean(marketBaselineRuntime), status: useReplayTheo || marketBaselineRuntime ? "READY" : "THEO_UNAVAILABLE" },
@@ -102,6 +122,7 @@ async function refreshLiveMarketBaseline(): Promise<void> {
         const market = mapOddsUpdateToMarket(event.update, "TXODDS");
         liveMarkets.set(market.marketId, market);
         await marketBaselineRuntime.onObservation(market, toNormalizedMarketObservation(event));
+        makerHawkController.ingest(sanitizeMarketUpdate(event.update), "LIVE", market);
       }
     } catch (error) {
       marketBaselineRuntime.setConnectionStatus(liveAdapter.status, new Date().toISOString());
@@ -280,6 +301,27 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
     return send(res, ready ? 200 : 503, { ok: ready, dataStatus: status, theoStatus: baseline?.theo ?? null });
   }
   if (req.method === "GET" && pathName === "/api/txodds/status") return send(res, 200, dataStatus());
+  if (req.method === "GET" && pathName === "/api/fixtures/current") return send(res, 200, currentFixtureSample);
+  if (req.method === "GET" && pathName === "/api/replays") {
+    return send(res, 200, [{
+      id: historicalReplaySample.id,
+      provenance: historicalReplaySample.provenance,
+      labels: historicalReplaySample.labels,
+      fixture: historicalReplaySample.fixture,
+      eventCount: historicalReplaySample.marketEvents.length,
+      finalState: historicalReplaySample.finalState,
+      deterministic: true,
+    }]);
+  }
+  if (req.method === "GET" && pathName.startsWith("/api/replays/")) {
+    const id = decodeURIComponent(pathName.slice("/api/replays/".length));
+    return id === historicalReplaySample.id
+      ? send(res, 200, historicalReplaySample)
+      : send(res, 404, { error: "UNKNOWN_REPLAY", id });
+  }
+  if (req.method === "GET" && pathName === "/api/agent/status") return send(res, 200, makerHawkController.status());
+  if (req.method === "GET" && pathName === "/api/agent/maker") return send(res, 200, makerHawkController.maker.status());
+  if (req.method === "GET" && pathName === "/api/agent/hawk") return send(res, 200, makerHawkController.hawk.status());
   if (req.method === "GET" && pathName === "/api/theo/status") {
     if (marketBaselineRuntime) return send(res, 200, marketBaselineRuntime.status().theo);
     return send(res, 200, {
@@ -290,12 +332,21 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
     });
   }
   if (req.method === "GET" && pathName === "/api/trading/status") {
-    if (marketBaselineRuntime) return send(res, 200, marketBaselineRuntime.status().trading);
-    return send(res, 200, {
-      maker: useReplayTheo ? "REPLAY_ENABLED" : "DISABLED",
-      directional: useReplayTheo ? "REPLAY_ENABLED" : "DISABLED",
-      kelly: useReplayTheo ? "REPLAY_ENABLED" : "DISABLED",
+    if (marketBaselineRuntime) return send(res, 200, {
+      ...marketBaselineRuntime.status().trading,
+      hawk: makerHawkController.hawk.status().state,
+      sharedRisk: makerHawkController.shared.status(),
+      directionalActions: "PAPER_ONLY",
       realExecution: "DISABLED",
+    });
+    return send(res, 200, {
+      maker: makerHawkController.maker.status().state === "QUOTING" ? "PAPER_ENABLED" : "DISABLED",
+      hawk: makerHawkController.hawk.status().state,
+      directional: "PAPER_ONLY",
+      directionalActions: "PAPER_ONLY",
+      kelly: "DISABLED",
+      realExecution: "DISABLED",
+      sharedRisk: makerHawkController.shared.status(),
     });
   }
   if (req.method === "GET" && pathName === "/api/config") {
@@ -468,7 +519,26 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
   }
 
   if (req.method === "GET" && pathName === "/api/demo/snapshot") return send(res, 200, demoSnapshot());
-  if (req.method === "GET" && pathName === "/api/audit") return send(res, 200, marketBaselineRuntime?.audit ?? loop.state.audit);
+  if (req.method === "GET" && pathName === "/api/audit") return send(res, 200, {
+    security: makerHawkController.status().security,
+    currentFixture: {
+      id: currentFixtureSample.id,
+      provenance: currentFixtureSample.provenance,
+      resultStatus: currentFixtureSample.resultStatus,
+      credentialsIncluded: currentFixtureSample.credentialsIncluded,
+    },
+    historicalReplay: {
+      id: historicalReplaySample.id,
+      provenance: historicalReplaySample.provenance,
+      contentHash: historicalReplaySample.contentHash,
+      finalResultVerified: historicalReplaySample.finalResultVerified,
+      resultFabricated: historicalReplaySample.resultFabricated,
+      credentialsIncluded: historicalReplaySample.credentialsIncluded,
+    },
+    quoteGuard: adaptiveQuoteGuard.status(),
+    agents: makerHawkController.audit,
+    legacy: marketBaselineRuntime?.audit ?? loop.state.audit,
+  });
 
   return send(res, 404, { error: "NOT_FOUND" });
 }
@@ -507,4 +577,20 @@ if (process.argv[1]?.endsWith("server.ts")) {
   void start();
 }
 
-export { route, loop, clock, replayAdapter, liveAdapter, dataConfig, pipelineTheo, useReplayTheo, nullTheo, marketBaselineRuntime, marketBaselineConfig };
+export {
+  route,
+  loop,
+  clock,
+  replayAdapter,
+  liveAdapter,
+  dataConfig,
+  pipelineTheo,
+  useReplayTheo,
+  nullTheo,
+  marketBaselineRuntime,
+  marketBaselineConfig,
+  makerHawkController,
+  currentFixtureSample,
+  historicalReplaySample,
+  adaptiveQuoteGuard,
+};

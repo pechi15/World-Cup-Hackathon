@@ -1,0 +1,104 @@
+{
+  "schemaVersion": "txodds-current-fixture-v1",
+  "id": "argentina-spain",
+  "capturedAt": "2026-07-19T08:43:34.857Z",
+  "provenance": "SANITIZED_TXODDS",
+  "labels": [
+    "LIVE_TXODDS_INPUT",
+    "PAPER_ONLY",
+    "NO_REAL_EXECUTION"
+  ],
+  "fixture": {
+    "fixtureId": "18257739",
+    "participant1": "Spain",
+    "participant2": "Argentina",
+    "participant1IsHome": true,
+    "competitionId": "72",
+    "competition": "World Cup",
+    "startTime": "2026-07-19T19:00:00.000Z",
+    "gameState": 1
+  },
+  "stream": {
+    "attempted": true,
+    "available": true,
+    "quiet": true,
+    "fallbackPollPerformed": true
+  },
+  "marketSnapshots": [
+    {
+      "timestamp": "2026-07-19T08:43:22.800Z",
+      "fixtureId": "18257739",
+      "marketId": "18257739:ASIANHANDICAP_PARTICIPANT_GOALS:line=-0.5:half=1",
+      "marketType": "ASIANHANDICAP_PARTICIPANT_GOALS",
+      "marketParameters": "line=-0.5",
+      "marketPeriod": "half=1",
+      "inRunning": false,
+      "selectionIds": [
+        "18257739:ASIANHANDICAP_PARTICIPANT_GOALS:line=-0.5:half=1:0:part1",
+        "18257739:ASIANHANDICAP_PARTICIPANT_GOALS:line=-0.5:half=1:1:part2"
+      ],
+      "selectionLabels": [
+        "part1",
+        "part2"
+      ],
+      "marketProbabilities": [
+        0.30067283431455,
+        0.69932716568545
+      ],
+      "probabilityField": "STABLE_PRICE",
+      "demarginingStatus": "VERIFIED_ALREADY_DEMARGINED",
+      "messageId": "1838458707:00003:000163-10021-stab",
+      "reasonCodes": [
+        "TXLINE_STABLE_PRICE_DEMARGINED_SOURCE_VERIFIED",
+        "MILLIODDS_DECODED_WHEN_PRESENT",
+        "DOUBLE_DEVIG_SKIPPED",
+        "PCT_NOT_SELECTED_UNVERIFIED"
+      ]
+    },
+    {
+      "timestamp": "2026-07-19T08:43:27.801Z",
+      "fixtureId": "18257739",
+      "marketId": "18257739:1X2_PARTICIPANT_RESULT::half=1",
+      "marketType": "1X2_PARTICIPANT_RESULT",
+      "marketParameters": null,
+      "marketPeriod": "half=1",
+      "inRunning": false,
+      "selectionIds": [
+        "18257739:1X2_PARTICIPANT_RESULT::half=1:0:part1",
+        "18257739:1X2_PARTICIPANT_RESULT::half=1:1:draw",
+        "18257739:1X2_PARTICIPANT_RESULT::half=1:2:part2"
+      ],
+      "selectionLabels": [
+        "part1",
+        "draw",
+        "part2"
+      ],
+      "marketProbabilities": [
+        0.2999318280143161,
+        0.48589539096196793,
+        0.214172781023716
+      ],
+      "probabilityField": "STABLE_PRICE",
+      "demarginingStatus": "VERIFIED_ALREADY_DEMARGINED",
+      "messageId": "1838458716:00003:000005-10021-stab",
+      "reasonCodes": [
+        "TXLINE_STABLE_PRICE_DEMARGINED_SOURCE_VERIFIED",
+        "MILLIODDS_DECODED_WHEN_PRESENT",
+        "DOUBLE_DEVIG_SKIPPED",
+        "PCT_NOT_SELECTED_UNVERIFIED"
+      ]
+    }
+  ],
+  "dataQuality": {
+    "receivedMarketEvents": 2,
+    "acceptedMarketEvents": 2,
+    "rejectedMarketEvents": []
+  },
+  "finalState": null,
+  "resultStatus": "FUTURE_FIXTURE_NO_RESULT",
+  "reasonCodes": [
+    "FINAL_RESULT_NOT_YET_AVAILABLE",
+    "RESULT_NOT_FABRICATED"
+  ],
+  "credentialsIncluded": false
+}

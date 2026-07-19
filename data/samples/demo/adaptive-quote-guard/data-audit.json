@@ -1,0 +1,39 @@
+{
+  "aggregateDatasetHashValidated": true,
+  "credentialsDetected": false,
+  "datasetHash": "6f13b98b0936b5b7383a0e8a40ec59df9f5ae6c79ffc81d95138eba1662e8450",
+  "datasetId": "txodds-6f13b98b0936b5b7",
+  "datasetPath": "E:\\Hackathons\\World-Cup-txodds-colab\\data\\samples\\colab\\txodds-6f13b98b0936b5b7\\market_events.jsonl",
+  "earliestTimestamp": "2026-01-01T00:00:00.000Z",
+  "fixtureCount": 1,
+  "labels": [
+    "SANITIZED_TXODDS",
+    "REPLAY_TRAINED_QUOTE_GUARD",
+    "NOT_PROVEN_ALPHA",
+    "PAPER_ONLY"
+  ],
+  "latestTimestamp": "2026-01-01T00:01:00.000Z",
+  "manifestChecksumsValidated": true,
+  "observationCount": 12,
+  "observationFileSelection": {
+    "file": "market_events.jsonl",
+    "method": "DATASET_MANIFEST_AND_MARKET_EVENTS_SCHEMA",
+    "notSelectedByFilesystemRecency": true,
+    "table": "market_events"
+  },
+  "probabilityRules": {
+    "Pct": "PRESERVED_BUT_NOT_SELECTED_SEMANTICS_UNVERIFIED",
+    "Prices": "DECIMAL_ODDS_TO_IMPLIED_PROBABILITY_THEN_PROPORTIONAL_DEVIG_ONCE",
+    "StablePrice": "DOCUMENTED_NORMALIZED_PROBABILITY_NO_SECOND_DEVIG",
+    "decimalOddsDividedBy100": false
+  },
+  "probabilitySourceCounts": {
+    "PRICES_DECIMAL": 12
+  },
+  "provenance": "SANITIZED_TXODDS",
+  "sanitized": true,
+  "schemaVersion": "1.0.0",
+  "seriesCount": 3,
+  "sourceNetwork": "sanitized-replay",
+  "sourceUri": "data/samples/colab/sanitized-mini-input.json"
+}
