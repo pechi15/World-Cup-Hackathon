@@ -109,7 +109,7 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
   if (req.method === "GET" && path === "/api/positions") return send(req, res, 200, product.state().positions);
   if (req.method === "GET" && path === "/api/risk") return send(req, res, 200, product.state().risk);
   if (req.method === "GET" && path === "/api/performance") return send(req, res, 200, product.state().performance);
-  if (req.method === "GET" && path === "/api/audit") return send(req, res, 200, product.state().audit);
+  if (req.method === "GET" && path === "/api/audit") return send(req, res, 200, product.mode === "txline" ? product.live?.audit ?? [] : product.state().audit);
   if (req.method === "GET" && path === "/api/fills") return send(req, res, 200, product.mode === "txline" ? product.live?.fills ?? [] : product.state().makerFills ?? []);
 
   if (req.method === "GET" && path === "/api/config") {
