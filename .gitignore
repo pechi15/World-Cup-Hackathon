@@ -26,3 +26,4 @@ research/.mypy_cache/
 *.pyc
 !research/data/samples/
 !research/uv.lock
+.vercel
