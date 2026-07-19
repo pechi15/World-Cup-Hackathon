@@ -54,7 +54,7 @@ Owned by production risk package (`packages/risk`). Research agents must not mut
 
 ## Kelly and model risk
 
-Kelly (1956) sizing is extremely sensitive to probability error. Default research fractions: `0`, `0.10`, `0.25`. Hard portfolio caps always bind. Null theo → no trade.
+Kelly (1956) sizing is extremely sensitive to probability error. Default research fractions: `0`, `0.10`, `0.25`; the reusable utility hard-caps runtime input at quarter Kelly. Hard selection, market, fixture, bankroll-fraction, and portfolio worst-case-loss caps always bind. Null/non-independent theo or missing calibration metadata → null size. Fees and slippage are applied to executable ask/bid or decimal odds; midpoint is not an accepted input. `THEO_MODE=market_baseline` returns `DISABLED_NON_INDEPENDENT_THEO`. See `docs/fractional-kelly-guardrails.md`.
 
 ## Failure modes to monitor
 

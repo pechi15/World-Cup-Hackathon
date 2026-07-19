@@ -1,5 +1,7 @@
 import type { MarketDefinition, StrategyDecision, TheoEstimate } from "../../contracts/src/index.js";
 
+export * from "./fractional-kelly.js";
+
 export type StrategyInput = {
   market: MarketDefinition;
   selectionId: string;
@@ -57,42 +59,4 @@ export class NoTheoNoActionStrategy implements DirectionalStrategy {
       status: "READY",
     };
   }
-}
-
-export type KellyInput = {
-  modelProbability: number | null;
-  offeredPrice: number;
-  bankroll: number;
-  kellyFraction: number;
-  maxPosition: number;
-  maxFixtureExposure: number;
-  maxPortfolioExposure: number;
-};
-
-export type KellyResult = {
-  size: number | null;
-  fraction: number | null;
-  estimatedEdge: number | null;
-  status: "AVAILABLE" | "NO_EDGE" | "THEO_UNAVAILABLE" | "INVALID_INPUT";
-  reasonCodes: string[];
-};
-
-export function fractionalKelly(input: KellyInput): KellyResult {
-  if (input.modelProbability === null) {
-    return { size: null, fraction: null, estimatedEdge: null, status: "THEO_UNAVAILABLE", reasonCodes: ["THEO_UNAVAILABLE"] };
-  }
-  const p = input.modelProbability;
-  const price = input.offeredPrice;
-  if (p <= 0 || p >= 1 || price <= 0 || price >= 1 || input.bankroll <= 0 || input.kellyFraction < 0) {
-    return { size: 0, fraction: null, estimatedEdge: null, status: "INVALID_INPUT", reasonCodes: ["INVALID_KELLY_INPUT"] };
-  }
-  const edge = p - price;
-  if (edge <= 0) {
-    return { size: 0, fraction: 0, estimatedEdge: edge, status: "NO_EDGE", reasonCodes: ["NON_POSITIVE_EDGE"] };
-  }
-  const fullKelly = edge / (1 - price);
-  const fraction = Math.max(0, fullKelly * input.kellyFraction);
-  const uncapped = input.bankroll * fraction;
-  const cap = Math.min(input.maxPosition, input.maxFixtureExposure, input.maxPortfolioExposure);
-  return { size: Math.max(0, Math.min(uncapped, cap)), fraction, estimatedEdge: edge, status: "AVAILABLE", reasonCodes: [] };
 }

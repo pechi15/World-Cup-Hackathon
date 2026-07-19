@@ -164,13 +164,37 @@ describe("theo, quoting, strategy, and Kelly safeguards", () => {
   });
 
   it("calculates fractional Kelly for valid binary opportunities", () => {
-    const result = fractionalKelly({ modelProbability: 0.6, offeredPrice: 0.5, bankroll: 1000, kellyFraction: 0.5, maxPosition: 80, maxFixtureExposure: 100, maxPortfolioExposure: 100 });
+    const result = fractionalKelly({
+      modelProbability: 0.6,
+      executable: { kind: "BINARY_CONTRACT", price: 0.5, side: "BUY", priceSource: "ASK" },
+      bankroll: 1000,
+      kellyFraction: 0.25,
+      maximumBankrollFraction: 0.1,
+      fees: 0,
+      slippage: 0,
+      independentTheoStatus: "AVAILABLE",
+      calibration: { status: "CALIBRATED", method: "held-out reliability" },
+      theoMode: "research",
+      caps: { selection: 80, market: 100, fixture: 100, portfolioWorstCaseLoss: 100 },
+    });
     expect(result.status).toBe("AVAILABLE");
-    expect(result.size).toBe(80);
+    expect(result.size).toBeCloseTo(50, 12);
   });
 
   it("disables Kelly when theo is null", () => {
-    const result = fractionalKelly({ modelProbability: null, offeredPrice: 0.5, bankroll: 1000, kellyFraction: 0.5, maxPosition: 80, maxFixtureExposure: 100, maxPortfolioExposure: 100 });
+    const result = fractionalKelly({
+      modelProbability: null,
+      executable: { kind: "BINARY_CONTRACT", price: 0.5, side: "BUY", priceSource: "ASK" },
+      bankroll: 1000,
+      kellyFraction: 0.25,
+      maximumBankrollFraction: 0.1,
+      fees: 0,
+      slippage: 0,
+      independentTheoStatus: "UNAVAILABLE",
+      calibration: { status: "CALIBRATED" },
+      theoMode: "research",
+      caps: { selection: 80, market: 100, fixture: 100, portfolioWorstCaseLoss: 100 },
+    });
     expect(result.status).toBe("THEO_UNAVAILABLE");
     expect(result.size).toBeNull();
   });

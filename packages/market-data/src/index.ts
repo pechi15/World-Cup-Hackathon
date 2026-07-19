@@ -17,6 +17,7 @@ export * from "./event-store.js";
 export * from "./mapper.js";
 export * from "./config.js";
 export * from "./txline-readonly.js";
+export * from "./historical.js";
 
 export class DisabledTxoddsAdapter {
   readonly status: TxoddsAdapterStatus;

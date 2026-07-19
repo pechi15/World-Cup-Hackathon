@@ -5,7 +5,6 @@ import { PipelineTheoProvider } from "../../theo/src/pipeline.js";
 import { defaultQuoteConfig, generateQuote } from "../../quoting/src/index.js";
 import { applyFill, createEmptyPortfolio, markPortfolio } from "../../portfolio/src/index.js";
 import { PaperExecutionEngine } from "../../execution/src/index.js";
-import { fractionalKelly } from "../../strategies/src/index.js";
 import { appendAuditEvent, type AuditEvent } from "../../evaluation/src/audit.js";
 import { computeMarkouts } from "../../evaluation/src/markout.js";
 
@@ -154,41 +153,10 @@ export class AutonomousTradingLoop {
         }
       }
 
-      // Directional fractional Kelly (taker) when edge vs market mid is positive.
-      const marketMid = this.state.mids.get(`${market.marketId}|${selection.selectionId}`) ?? null;
-      const modelP = theo.probabilities?.[selection.selectionId] ?? null;
-      if (theo.status === "AVAILABLE" && modelP != null && marketMid != null && marketMid > 0 && marketMid < 1) {
-        const kelly = fractionalKelly({
-          modelProbability: modelP,
-          offeredPrice: marketMid,
-          bankroll: this.config.bankroll,
-          kellyFraction: this.config.kellyFraction,
-          maxPosition: this.config.riskLimits.maxPositionPerSelection,
-          maxFixtureExposure: this.config.riskLimits.maxExposurePerFixture,
-          maxPortfolioExposure: this.config.riskLimits.maxWorstCaseLoss,
-        });
-        if (kelly.status === "AVAILABLE" && kelly.size && kelly.size > 0) {
-          const order = {
-            orderId: `dir-${event.eventId}-${selection.selectionId}`,
-            marketId: market.marketId,
-            selectionId: selection.selectionId,
-            side: "BUY" as const,
-            price: marketMid,
-            size: kelly.size,
-            status: "NEW" as const,
-            executionStyle: "TAKER" as const,
-            strategyId: "autonomous-directional",
-            createdAt: asOf,
-            provenance: { source: "REPLAY" as const, notes: "Fractional Kelly paper taker." },
-          };
-          const result = this.execution.submitOrder(this.state.portfolio, market, order, this.config.riskLimits);
-          this.state.portfolio = result.portfolio;
-          this.state.fills.push(...result.fills);
-          reasonCodes.push(`KELLY_SIZE=${kelly.size.toFixed(2)}`);
-        } else {
-          reasonCodes.push(...kelly.reasonCodes);
-        }
-      }
+      // Kelly remains calculation-only. The maker submission has no directional
+      // taker path; executable-price sizing can be considered only by a future,
+      // independently calibrated and separately approved strategy contract.
+      reasonCodes.push("KELLY_DIRECTIONAL_ORDER_PATH_DISABLED");
     }
 
     this.state.quotes = quotes;
