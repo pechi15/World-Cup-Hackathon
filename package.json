@@ -10,6 +10,7 @@
     "dev:web": "vite --host 0.0.0.0 --config apps/web/vite.config.ts",
     "demo": "tsx apps/api/src/server.ts",
     "build": "tsc --noEmit && vite build --config apps/web/vite.config.ts",
+    "record:live-baseline": "tsx scripts/record-live-market-baseline.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

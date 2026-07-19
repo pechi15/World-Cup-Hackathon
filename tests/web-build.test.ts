@@ -9,5 +9,8 @@ describe("frontend demo source", () => {
     expect(source).toContain("Risk Sheet");
     expect(source).toContain("Audit Trail");
     expect(source).toContain("Backend disconnected");
+    expect(source).toContain("PAPER MARKET MAKING");
+    expect(source).toContain("MARKET CONSENSUS BASELINE");
+    expect(source).toContain("Maker Fill History");
   });
 });

@@ -1,40 +1,23 @@
 import http from "node:http";
 import { URL } from "node:url";
-import { markets, fixtures, marketPrices, defaultRiskLimits } from "./sample-data.js";
-import { awaitingTxoddsDisplay, type Fill, type Order } from "../../../packages/contracts/src/index.js";
-import { DisabledTxoddsAdapter } from "../../../packages/market-data/src/index.js";
-import { NullTheoProvider } from "../../../packages/theo/src/index.js";
-import { defaultQuoteConfig, generateQuote } from "../../../packages/quoting/src/index.js";
-import { createEmptyPortfolio, markPortfolio } from "../../../packages/portfolio/src/index.js";
-import { defaultScoreScenarios } from "../../../packages/market-model/src/index.js";
-import { buildRiskSnapshot, terminalOutcomeRisk } from "../../../packages/risk/src/index.js";
-import { PaperExecutionEngine } from "../../../packages/execution/src/index.js";
-import { buildPerformanceSnapshot } from "../../../packages/evaluation/src/index.js";
-import { DemoReplayEngine } from "../../../packages/demo/src/engine.js";
+import { fixtures, markets, marketPrices, defaultRiskLimits } from "./sample-data.js";
+import type { Order } from "../../../packages/contracts/src/index.js";
+import { ProductRuntime } from "./product-runtime.js";
 
 const port = Number(process.env.PORT ?? 8787);
 const host = process.env.HOST ?? "0.0.0.0";
-const theoProvider = new NullTheoProvider();
-const adapter = new DisabledTxoddsAdapter({
-  network: process.env.TXLINE_NETWORK,
-  apiOrigin: process.env.TXLINE_API_ORIGIN,
-  guestJwt: process.env.TXLINE_GUEST_JWT,
-  apiToken: process.env.TXLINE_API_TOKEN,
-  solanaRpcUrl: process.env.SOLANA_RPC_URL,
-});
-const execution = new PaperExecutionEngine();
-const demoEngine = new DemoReplayEngine();
-let riskLimits = { ...defaultRiskLimits };
-let portfolio = markPortfolio(createEmptyPortfolio(), marketPrices);
-let orders: Order[] = [];
-let fills: Fill[] = [];
-const strategies = [{ strategyId: "no-theo-no-action", enabled: false, status: "THEO_UNAVAILABLE" }];
+const product = new ProductRuntime(process.env);
 const rateLimit = new Map<string, { count: number; resetAt: number }>();
+void product.start();
 
 function send(req: http.IncomingMessage, res: http.ServerResponse, statusCode: number, body: unknown) {
   const origin = req.headers.origin;
   const allowedOrigin = allowedCorsOrigin(origin);
-  const headers: Record<string, string> = { "content-type": "application/json; charset=utf-8", "vary": "Origin" };
+  const headers: Record<string, string> = {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    vary: "Origin",
+  };
   if (allowedOrigin) {
     headers["access-control-allow-origin"] = allowedOrigin;
     headers["access-control-allow-methods"] = "GET,POST,OPTIONS";
@@ -47,38 +30,13 @@ function send(req: http.IncomingMessage, res: http.ServerResponse, statusCode: n
 async function readJson(req: http.IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of req) chunks.push(Buffer.from(chunk));
-  for (const chunk of chunks) size += chunk.length;
-  if (size > 64_000) throw new Error("REQUEST_TOO_LARGE");
-  if (chunks.length === 0) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-}
-
-async function quotes() {
-  const result = [];
-  for (const market of markets.filter((item) => item.status === "OPEN")) {
-    const theo = await theoProvider.getTheo({ market });
-    for (const selection of market.selections) {
-      result.push(generateQuote({
-        market,
-        selectionId: selection.selectionId,
-        theo,
-        inventory: portfolio.positions.find((position) => position.marketId === market.marketId && position.selectionId === selection.selectionId),
-        recentVolatility: 0,
-        sharpMovementSignal: 0,
-        dataAgeMs: Date.now() - Date.parse(market.updatedAt),
-        marketConcentration: 0,
-        remainingMarketRiskBudget: riskLimits.maxExposurePerMarket,
-        remainingFixtureRiskBudget: riskLimits.maxExposurePerFixture,
-        remainingPortfolioRiskBudget: riskLimits.maxWorstCaseLoss,
-        worstCaseMarginalLiability: 1,
-        directionalSignal: null,
-        riskLimits,
-        config: defaultQuoteConfig,
-      }));
-    }
+  for await (const chunk of req) {
+    const buffer = Buffer.from(chunk);
+    size += buffer.length;
+    if (size > 64_000) throw new Error("REQUEST_TOO_LARGE");
+    chunks.push(buffer);
   }
-  return result;
+  return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
 }
 
 async function route(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -86,112 +44,134 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse) {
   const path = url.pathname;
   if (req.method === "OPTIONS") return send(req, res, 204, {});
 
-  if (req.method === "GET" && path === "/health") return send(req, res, 200, { ok: true, dataStatus: adapter.getSystemDataStatus() });
-  if (req.method === "GET" && path === "/ready") return send(req, res, 200, { ready: true, demoMode: process.env.DEMO_MODE !== "false", dataMode: process.env.DATA_MODE ?? "replay" });
-  if (req.method === "GET" && path === "/api/demo/status") return send(req, res, 200, { status: demoEngine.getState().replayStatus, backendStatus: "CONNECTED" });
-  if (req.method === "GET" && path === "/api/demo/state") {
-    demoEngine.tick();
-    return send(req, res, 200, demoEngine.getState());
+  if (req.method === "GET" && path === "/health") {
+    return send(req, res, 200, {
+      ok: true,
+      dataStatus: product.dataStatus(),
+      dataMode: product.mode,
+      theoMode: product.baselineConfig.theoMode,
+      tradingMode: product.baselineConfig.tradingMode,
+    });
   }
-  if (req.method === "GET" && path === "/api/demo/audit") return send(req, res, 200, demoEngine.getAudit());
-  if (req.method === "GET" && path === "/api/demo/performance") return send(req, res, 200, demoEngine.getPerformance());
+  if (req.method === "GET" && path === "/ready") {
+    const ready = product.mode === "replay"
+      ? product.baselineConfig.valid
+      : product.mode === "txline" && product.dataStatus().status === "CONNECTED" && product.baselineConfig.valid;
+    return send(req, res, ready ? 200 : 503, { ready, mode: product.mode, dataStatus: product.dataStatus(), reasonCodes: product.baselineConfig.reasonCodes });
+  }
+  if (req.method === "GET" && path === "/api/txodds/status") return send(req, res, 200, product.dataStatus());
+  if (req.method === "GET" && path === "/api/theo/status") return send(req, res, 200, product.theoStatus());
+  if (req.method === "GET" && path === "/api/trading/status") return send(req, res, 200, product.tradingStatus());
+
+  if (req.method === "GET" && path === "/api/demo/status") {
+    const state = product.state();
+    return send(req, res, 200, { status: state.replayStatus, backendStatus: state.backendStatus, mode: product.mode });
+  }
+  if (req.method === "GET" && path === "/api/demo/state") {
+    if (product.mode === "replay") product.demo.tick();
+    return send(req, res, 200, product.state());
+  }
+  if (req.method === "GET" && path === "/api/demo/audit") return send(req, res, 200, product.state().audit);
+  if (req.method === "GET" && path === "/api/demo/performance") return send(req, res, 200, product.state().performance);
   if (req.method === "POST" && path.startsWith("/api/demo/")) {
-    const limited = checkRateLimit(req);
-    if (limited) return send(req, res, 429, { error: "RATE_LIMITED" });
-    if (path === "/api/demo/start") demoEngine.start();
-    else if (path === "/api/demo/pause") demoEngine.pause();
-    else if (path === "/api/demo/resume") demoEngine.resume();
-    else if (path === "/api/demo/reset") demoEngine.reset();
-    else if (path === "/api/demo/step") demoEngine.step();
-    else if (path === "/api/demo/inject-shock") demoEngine.injectShock();
+    if (product.mode !== "replay") return send(req, res, 409, { error: "REPLAY_CONTROLS_DISABLED_IN_TXLINE_MODE" });
+    if (checkRateLimit(req)) return send(req, res, 429, { error: "RATE_LIMITED" });
+    if (path === "/api/demo/start") product.demo.start();
+    else if (path === "/api/demo/pause") product.demo.pause();
+    else if (path === "/api/demo/resume") product.demo.resume();
+    else if (path === "/api/demo/reset") product.demo.reset();
+    else if (path === "/api/demo/step") product.demo.step();
+    else if (path === "/api/demo/inject-shock") product.demo.injectShock();
     else if (path === "/api/demo/speed") {
       const body = await readJson(req) as { speed?: number };
-      demoEngine.setSpeed(Number(body.speed));
+      product.demo.setSpeed(Number(body.speed));
     } else return send(req, res, 404, { error: "NOT_FOUND" });
-    return send(req, res, 200, demoEngine.getState());
+    return send(req, res, 200, product.state());
   }
-  if (req.method === "GET" && path === "/api/config") return send(req, res, 200, { network: "devnet-ready", txodds: adapter.getSystemDataStatus(), theoDisplay: awaitingTxoddsDisplay, riskLimits });
+
+  if (req.method === "GET" && path === "/api/quotes") {
+    if (product.mode === "txline") return send(req, res, 200, product.live?.activeQuotes() ?? []);
+    return send(req, res, 200, product.state().marketRows.map((row) => ({
+      marketId: row.marketId,
+      selectionId: row.selectionId,
+      bid: row.bid,
+      ask: row.ask,
+      width: row.width,
+      inventoryLean: row.inventoryLean,
+      directionalLean: 0,
+      bidSize: row.bidSize,
+      askSize: row.askSize,
+      status: row.status,
+      reasonCodes: row.reasonCodes,
+      quoteMode: "MARKET_BASELINE_MAKER_ONLY",
+    })));
+  }
+  if (req.method === "GET" && path === "/api/positions") return send(req, res, 200, product.state().positions);
+  if (req.method === "GET" && path === "/api/risk") return send(req, res, 200, product.state().risk);
+  if (req.method === "GET" && path === "/api/performance") return send(req, res, 200, product.state().performance);
+  if (req.method === "GET" && path === "/api/audit") return send(req, res, 200, product.state().audit);
+  if (req.method === "GET" && path === "/api/fills") return send(req, res, 200, product.mode === "txline" ? product.live?.fills ?? [] : product.state().makerFills ?? []);
+
+  if (req.method === "GET" && path === "/api/config") {
+    return send(req, res, 200, {
+      mode: product.mode,
+      network: product.mode === "txline" ? "devnet" : "local-replay",
+      txodds: product.dataStatus(),
+      theo: product.theoStatus(),
+      trading: product.tradingStatus(),
+      riskLimits: product.live?.riskLimits ?? defaultRiskLimits,
+    });
+  }
   if (req.method === "GET" && path === "/api/fixtures") return send(req, res, 200, fixtures);
   if (req.method === "GET" && path === "/api/markets") return send(req, res, 200, markets);
   if (req.method === "GET" && path.startsWith("/api/markets/")) {
     const market = markets.find((item) => item.marketId === decodeURIComponent(path.split("/").at(-1) ?? ""));
     return market ? send(req, res, 200, market) : send(req, res, 404, { error: "UNKNOWN_MARKET" });
   }
-  if (req.method === "GET" && path.startsWith("/api/theo/")) {
-    const marketId = decodeURIComponent(path.split("/").at(-1) ?? "");
-    const market = markets.find((item) => item.marketId === marketId);
-    return market ? send(req, res, 200, await theoProvider.getTheo({ market })) : send(req, res, 404, { marketId, probabilities: null, uncertainty: null, status: "UNSUPPORTED_MARKET", modelVersion: null, source: null, reasonCodes: ["UNKNOWN_MARKET"] });
-  }
-  if (req.method === "GET" && path === "/api/quotes") return send(req, res, 200, await quotes());
-  if (req.method === "GET" && path === "/api/positions") return send(req, res, 200, portfolio.positions);
-  if (req.method === "GET" && path === "/api/portfolio") return send(req, res, 200, portfolio);
-  if (req.method === "GET" && path === "/api/risk") {
-    const scenarios = defaultScoreScenarios("fixture-test-001", "TEST_FIXTURE");
-    const terminal = terminalOutcomeRisk(portfolio, markets, scenarios, null);
-    return send(req, res, 200, { snapshot: buildRiskSnapshot(portfolio, riskLimits, terminal), terminal });
-  }
-  if (req.method === "POST" && path === "/api/risk/scenario") {
-    const body = await readJson(req) as { fixtureId?: string };
-    const scenarios = defaultScoreScenarios(body.fixtureId ?? "fixture-test-001", "TEST_FIXTURE");
-    return send(req, res, 200, terminalOutcomeRisk(portfolio, markets, scenarios, null));
-  }
-  if (req.method === "GET" && path === "/api/fills") return send(req, res, 200, fills);
-  if (req.method === "GET" && path === "/api/orders") return send(req, res, 200, orders);
-  if (req.method === "GET" && path === "/api/performance") return send(req, res, 200, buildPerformanceSnapshot(portfolio));
-  if (req.method === "GET" && path === "/api/strategies") return send(req, res, 200, strategies);
-  if (req.method === "POST" && path.match(/^\/api\/strategies\/[^/]+\/enable$/)) return send(req, res, 409, { status: "THEO_UNAVAILABLE", reasonCodes: ["TXODDS_API_NOT_CONNECTED"] });
-  if (req.method === "POST" && path.match(/^\/api\/strategies\/[^/]+\/disable$/)) return send(req, res, 200, { status: "DISABLED" });
+
   if (req.method === "POST" && path === "/api/orders/paper") {
-    const body = await readJson(req) as Partial<Order>;
-    const market = markets.find((item) => item.marketId === body.marketId);
-    if (!market) return send(req, res, 404, { error: "UNKNOWN_MARKET" });
-    const order: Order = {
-      orderId: body.orderId ?? `paper-${Date.now()}`,
-      marketId: market.marketId,
-      selectionId: body.selectionId ?? market.selections[0].selectionId,
-      side: body.side ?? "BUY",
-      price: body.price ?? 0.5,
-      size: body.size ?? 1,
-      status: "NEW",
-      executionStyle: body.executionStyle ?? "TAKER",
-      strategyId: body.strategyId,
-      createdAt: new Date().toISOString(),
-      provenance: { source: "SYNTHETIC", notes: "Paper-only order submitted through local API." },
-    };
-    const result = execution.submitOrder(portfolio, market, order, riskLimits);
-    portfolio = markPortfolio(result.portfolio, marketPrices);
-    orders = [...orders, result.order];
-    fills = [...fills, ...result.fills];
-    return send(req, res, result.order.status === "REJECTED" ? 422 : 200, result);
+    return send(req, res, 409, {
+      error: "MANUAL_ORDER_ENTRY_DISABLED",
+      reasonCodes: ["AUTONOMOUS_MAKER_ONLY", "DIRECTIONAL_TRADING_DISABLED", "NO_REAL_EXECUTION"],
+    });
   }
   if (req.method === "POST" && path === "/api/kill-switch/enable") {
-    riskLimits = { ...riskLimits, killSwitch: true };
+    if (product.live) product.live.setRiskLimits({ ...product.live.riskLimits, killSwitch: true });
     return send(req, res, 200, { killSwitch: true });
   }
   if (req.method === "POST" && path === "/api/kill-switch/disable") {
-    riskLimits = { ...riskLimits, killSwitch: false };
-    return send(req, res, 200, { killSwitch: false });
+    if (product.live) product.live.setRiskLimits({ ...product.live.riskLimits, killSwitch: false });
+    return send(req, res, 200, { killSwitch: product.live?.riskLimits.killSwitch ?? false });
   }
 
   return send(req, res, 404, { error: "NOT_FOUND" });
 }
 
-if (process.argv[1]?.endsWith("server.ts")) {
+if (process.argv[1]?.endsWith("server.ts") || process.argv[1]?.endsWith("server.js")) {
   const server = http.createServer((req, res) => {
-    route(req, res).catch((error) => send(req, res, error instanceof Error && error.message === "REQUEST_TOO_LARGE" ? 413 : 500, { error: "INTERNAL_ERROR", message: process.env.NODE_ENV === "production" ? "Request failed" : error instanceof Error ? error.message : String(error) }));
+    route(req, res).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      send(req, res, message === "REQUEST_TOO_LARGE" ? 413 : 500, {
+        error: "INTERNAL_ERROR",
+        message: process.env.NODE_ENV === "production" ? "Request failed" : message,
+      });
+    });
   });
-  server.listen(port, host, () => {
-    console.log(`World Cup market-making API listening on http://${host}:${port}`);
+  server.listen(port, host, () => console.log(`World Cup paper market maker listening on http://${host}:${port}`));
+  process.on("SIGTERM", () => {
+    product.stop();
+    server.close(() => process.exit(0));
   });
-  process.on("SIGTERM", () => server.close(() => process.exit(0)));
 }
 
-export { route };
+export { route, product };
 
 function allowedCorsOrigin(origin: string | undefined) {
-  const allowed = new Set((process.env.ALLOWED_ORIGINS ?? "http://localhost:5173,http://127.0.0.1:5173").split(",").map((item) => item.trim()).filter(Boolean));
-  if (!origin) return undefined;
-  return allowed.has(origin) ? origin : undefined;
+  const allowed = new Set((process.env.ALLOWED_ORIGINS ?? "http://localhost:5173,http://127.0.0.1:5173")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean));
+  return origin && allowed.has(origin) ? origin : undefined;
 }
 
 function checkRateLimit(req: http.IncomingMessage) {

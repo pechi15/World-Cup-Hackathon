@@ -13,6 +13,21 @@ export interface DirectionalStrategy {
 
 export class NoTheoNoActionStrategy implements DirectionalStrategy {
   async evaluate(input: StrategyInput): Promise<StrategyDecision> {
+    if (input.theo.status === "AVAILABLE_BENCHMARK" || input.theo.independentAlpha === false) {
+      return {
+        action: "NO_ACTION",
+        marketId: input.market.marketId,
+        selectionId: input.selectionId,
+        proposedSize: null,
+        theo: input.theo,
+        marketProbability: input.marketProbability,
+        estimatedEdge: null,
+        confidence: null,
+        reasonCodes: ["NON_INDEPENDENT_MARKET_BASELINE", "DIRECTIONAL_TRADING_DISABLED", "KELLY_DISABLED"],
+        strategyVersion: "no-theo-no-action/0.1.0",
+        status: "DISABLED",
+      };
+    }
     if (input.theo.status !== "AVAILABLE" || input.theo.probabilities === null) {
       return {
         action: "NO_ACTION",

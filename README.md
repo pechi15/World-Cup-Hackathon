@@ -1,38 +1,36 @@
-# TxODDS World Cup London Hackathon
+# World Cup paper market maker
 
-Project root for the **Trading Tools and Agents** track setup.
+Submission-ready autonomous paper market maker centred on a TxODDS market-consensus baseline.
 
-## Layout
+- `PAPER MARKET MAKING`
+- `MARKET CONSENSUS BASELINE`
+- `NO PROPRIETARY ALPHA`
+- `NO REAL EXECUTION`
 
-| Path | Purpose |
-|------|---------|
-| `txodds/` | TxODDS repositories (e.g. `tx-on-chain`) |
-| `projects/` | Your hackathon project work |
-| `starters/` | Starter projects (e.g. `full-stack-starter`) |
-| `data/` | Datasets and Python analysis environments |
-| `scripts/` | Setup logs and utility scripts |
-| `docs/` | Notes and documentation |
-| `temp/` | Scratch / temporary files |
+The state-space component is a market filter only. Directional actions are always `NO_ACTION`, estimated edge and Kelly size remain null, and wallet/subscription operations are hard-disabled.
 
-## Quick start
+## Local replay
 
 ```powershell
-Set-Location "E:\Hackathons\World-Cup"
-
-# TxODDS official repo
-Set-Location ".\txodds\tx-on-chain"
-
-# Full-stack starter
-Set-Location "E:\Hackathons\World-Cup\starters\full-stack-starter"
-npm run dev
-
-# Python analytics env
-Set-Location "E:\Hackathons\World-Cup"
-.\data\python-env\.venv\Scripts\Activate.ps1
+Copy-Item .env.example .env
+npm.cmd ci
+npm.cmd run dev
 ```
 
-## Setup log
+Open [http://localhost:5173](http://localhost:5173). The deterministic replay uses conservative future-observation crossing; zero fills is reported honestly when no eligible observation crosses a resting quote.
 
-See `scripts/setup-log.md` for installation progress and verified tool versions.
+## Verification
 
-**Do not store wallet keys, passwords, API keys, or seed phrases in this workspace.**
+```powershell
+npm.cmd run typecheck
+npm.cmd test
+npm.cmd run build
+npm.cmd exec playwright test
+git diff --check
+```
+
+## Live read-only mode
+
+The backend acquires and renews its guest JWT automatically. The activated TxODDS API token is backend-only; do not configure it in Vercel or expose it to browser code.
+
+Exact Railway/Vercel variables, smoke tests, and the recording command are in [docs/submission-deployment.md](docs/submission-deployment.md).

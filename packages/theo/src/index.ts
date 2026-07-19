@@ -28,3 +28,6 @@ export interface TxoddsTheoProvider extends TheoProvider {}
 export interface HistoricalTheoProvider extends TheoProvider {}
 export interface LearnedResidualTheoProvider extends TheoProvider {}
 export interface EnsembleTheoProvider extends TheoProvider {}
+
+export * from "./devig.js";
+export * from "./market-baseline.js";

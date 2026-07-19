@@ -9,12 +9,24 @@ type SelectionState = {
   probability: number;
   theo: number | null;
   uncertainty: number | null;
+  innovation: number | null;
+  standardizedInnovation: number | null;
+  volatility: number;
   inventory: number;
   avgEntry: number | null;
   realizedPnl: number;
   fees: number;
   makerQuantity: number;
   takerQuantity: number;
+};
+
+type RestingReplayQuote = {
+  bid: number;
+  ask: number;
+  bidSize: number;
+  askSize: number;
+  activatedAtIndex: number;
+  expiresAtIndex: number;
 };
 
 const fixtureLabel = "Atlas FC vs Boreal United";
@@ -32,6 +44,7 @@ export class DemoReplayEngine {
   private fills: Fill[] = [];
   private shockInjected = false;
   private readonly theoProvider = new BenchmarkStateSpaceTheoProvider();
+  private readonly restingQuotes = new Map<string, RestingReplayQuote>();
 
   constructor(private readonly dataMode: "synthetic" | "replay" | "txline" = readDataMode(), private readonly demoMode = process.env.DEMO_MODE !== "false") {
     this.events = createReplayEvents();
@@ -47,6 +60,8 @@ export class DemoReplayEngine {
     this.audit = [];
     this.fills = [];
     this.shockInjected = false;
+    this.restingQuotes.clear();
+    this.theoProvider.reset();
   }
 
   start() {
@@ -113,11 +128,11 @@ export class DemoReplayEngine {
     return {
       demoMode: this.demoMode,
       dataMode: this.dataMode,
-      dataSource: this.dataMode === "txline" ? "TXODDS_LIVE" : "TXODDS_REPLAY",
+      dataSource: this.dataMode === "txline" ? "TXODDS_LIVE_READ_ONLY" : "SANITIZED_DETERMINISTIC_REPLAY",
       replayStatus: this.status,
       backendStatus: "CONNECTED",
-      theoProvider: this.dataMode === "txline" ? "Awaiting approved quantitative model" : "BenchmarkStateSpaceTheoProvider",
-      strategyStatus: this.dataMode === "txline" ? "Disabled - theo unavailable" : "Demo benchmark enabled",
+      theoProvider: "TXODDS_MARKET_BASELINE",
+      strategyStatus: this.dataMode === "txline" ? "Disabled - market baseline unavailable" : "PAPER_ENABLED / DIRECTIONAL_DISABLED / KELLY_DISABLED",
       killSwitch: false,
       lastMarketUpdate,
       dataFreshnessMs: lastMarketUpdate ? 0 : null,
@@ -130,8 +145,11 @@ export class DemoReplayEngine {
       risk: this.risk(marketRows),
       performance,
       audit: this.audit.slice(-150),
-      disclaimer: "Replay and benchmark theo are for deterministic demo mechanics only; not live alpha, not historical profitability, not real execution.",
+      disclaimer: "PAPER MARKET MAKING · MARKET CONSENSUS BASELINE · NO PROPRIETARY ALPHA · NO REAL EXECUTION",
       buildVersion,
+      cash: 100_000 - this.fills.reduce((sum, fill) => sum + (fill.side === "BUY" ? fill.price * fill.size : -fill.price * fill.size) + fill.fee, 0),
+      feesPaid: this.fills.reduce((sum, fill) => sum + fill.fee, 0),
+      makerFills: [...this.fills],
     };
   }
 
@@ -160,9 +178,14 @@ export class DemoReplayEngine {
         eventType: event.eventType,
         dataMode: this.dataMode,
         demoMode: this.demoMode,
+        asOf: new Date(event.replayTimeMs).toISOString(),
       });
       target.theo = theo.probabilities?.[target.selectionId] ?? null;
       target.uncertainty = theo.uncertainty;
+      const diagnostics = this.theoProvider.getDiagnostics(target.marketId, target.selectionId);
+      target.innovation = diagnostics?.innovation ?? null;
+      target.standardizedInnovation = diagnostics?.standardizedInnovation ?? null;
+      target.volatility = diagnostics?.volatility ?? 0;
       this.rebalanceComplements(target);
     }
 
@@ -179,6 +202,7 @@ export class DemoReplayEngine {
         eventType: event.eventType === "MARKET_UPDATE" ? undefined : event.eventType,
       });
       this.maybeFill(event, row);
+      this.updateRestingQuote(event, row);
       this.audit.push(this.toAudit(event, row));
     }
 
@@ -209,15 +233,28 @@ export class DemoReplayEngine {
     if (this.dataMode === "txline" || row.theoProbability === null) return;
     const target = this.selections.find((item) => item.marketId === row.marketId && item.selectionId === row.selectionId);
     if (!target) return;
-    const fillSize = event.eventType === "MAKER_FILL" ? 15 : event.eventType === "DIRECTIONAL_FILL" ? 22 : 0;
-    if (!fillSize) return;
-    const side = row.edge !== null && row.edge > 0 ? "BUY" : "SELL";
-    const price = side === "BUY" ? row.ask ?? row.marketProbability : row.bid ?? row.marketProbability;
+    const key = `${row.marketId}|${row.selectionId}`;
+    const resting = this.restingQuotes.get(key);
+    if (!resting || event.index < resting.activatedAtIndex) return;
+    if (event.index > resting.expiresAtIndex) {
+      this.restingQuotes.delete(key);
+      return;
+    }
+    const shock = ["GOAL", "RED_CARD", "SHARP_MOVEMENT", "QUOTE_SUSPENSION", "INFO_SHOCK"].includes(event.eventType)
+      || Math.abs(target.standardizedInnovation ?? 0) >= 6;
+    if (shock) {
+      this.restingQuotes.delete(key);
+      return;
+    }
+    const side = row.marketProbability <= resting.bid ? "BUY" : row.marketProbability >= resting.ask ? "SELL" : null;
+    if (side === null) return;
+    const fillSize = Math.min(side === "BUY" ? resting.bidSize : resting.askSize, 25);
+    if (fillSize <= 0) return;
+    const price = side === "BUY" ? resting.bid : resting.ask;
     target.inventory += side === "BUY" ? fillSize : -fillSize;
     target.avgEntry = target.avgEntry === null ? price : (target.avgEntry * Math.max(0, Math.abs(target.inventory) - fillSize) + price * fillSize) / Math.max(1, Math.abs(target.inventory));
     target.fees += fillSize * price * 0.001;
-    target.makerQuantity += event.eventType === "MAKER_FILL" ? fillSize : 0;
-    target.takerQuantity += event.eventType === "DIRECTIONAL_FILL" ? fillSize : 0;
+    target.makerQuantity += fillSize;
     this.fills.push({
       fillId: `demo-fill-${event.index}`,
       orderId: `demo-order-${event.index}`,
@@ -227,10 +264,27 @@ export class DemoReplayEngine {
       price,
       size: fillSize,
       fee: fillSize * price * 0.001,
-      executionStyle: event.eventType === "MAKER_FILL" ? "MAKER" : "TAKER",
-      strategyId: event.eventType === "DIRECTIONAL_FILL" ? "demo-directional" : "demo-maker",
-      filledAt: new Date().toISOString(),
-      provenance: { source: "SYNTHETIC" },
+      executionStyle: "MAKER",
+      strategyId: "market-baseline-maker-paper",
+      filledAt: new Date(event.replayTimeMs).toISOString(),
+      provenance: { source: "REPLAY", notes: "Future-observation conservative cross-only paper fill." },
+    });
+    this.restingQuotes.delete(key);
+  }
+
+  private updateRestingQuote(event: DemoReplayEvent, row: DemoMarketRow) {
+    const key = `${row.marketId}|${row.selectionId}`;
+    if (row.status !== "LIVE" || row.bid === null || row.ask === null || row.bidSize === null || row.askSize === null) {
+      this.restingQuotes.delete(key);
+      return;
+    }
+    this.restingQuotes.set(key, {
+      bid: row.bid,
+      ask: row.ask,
+      bidSize: row.bidSize,
+      askSize: row.askSize,
+      activatedAtIndex: event.index + 1,
+      expiresAtIndex: event.index + 5,
     });
   }
 
@@ -248,13 +302,18 @@ export class DemoReplayEngine {
   private marketRows(): DemoMarketRow[] {
     return this.selections.map((selection) => {
       const theo = selection.theo;
-      const edge = theo === null ? null : theo - selection.probability;
-      const suspended = this.status === "COMPLETE" ? false : this.currentIndex >= 70 && this.currentIndex <= 78;
-      const widthBase = 0.025 + (selection.uncertainty ?? 0.04) * 0.55 + Math.min(0.08, Math.abs(selection.inventory) / 1000);
+      const edge = null;
+      const suspended = this.status === "COMPLETE" ? false : (this.currentIndex >= 70 && this.currentIndex <= 78) || Math.abs(selection.standardizedInnovation ?? 0) >= 6;
+      const widthBase = 0.012
+        + (selection.uncertainty ?? 0.04) * 0.35
+        + selection.volatility * 0.08
+        + Math.abs(selection.standardizedInnovation ?? 0) * 0.0015
+        + 0.001
+        + Math.min(0.08, Math.abs(selection.inventory) / 1000);
       const width = suspended || theo === null ? null : clamp(widthBase, 0.02, 0.18);
       const inventoryLean = -clamp(selection.inventory / 1500, -0.06, 0.06);
-      const directionalLean = edge === null ? 0 : clamp(edge * 0.35, -0.04, 0.04);
-      const center = theo === null ? null : clamp(theo + inventoryLean + directionalLean, 0.02, 0.98);
+      const directionalLean = 0;
+      const center = theo === null ? null : clamp(theo + inventoryLean, 0.02, 0.98);
       return {
         fixture: fixtureLabel,
         marketId: selection.marketId,
@@ -263,7 +322,10 @@ export class DemoReplayEngine {
         selection: selection.selection,
         marketProbability: selection.probability,
         theoProbability: theo,
+        filteredConsensus: theo,
         uncertainty: selection.uncertainty,
+        innovation: selection.innovation,
+        standardizedInnovation: selection.standardizedInnovation,
         edge,
         bid: center === null || width === null ? null : clamp(center - width, 0.01, 0.99),
         ask: center === null || width === null ? null : clamp(center + width, 0.01, 0.99),
@@ -273,8 +335,8 @@ export class DemoReplayEngine {
         bidSize: width === null ? null : Math.max(5, 60 - Math.abs(selection.inventory) * 0.4),
         askSize: width === null ? null : Math.max(5, 60 - Math.abs(selection.inventory) * 0.4),
         status: suspended ? "QUOTE_SUSPENDED" : theo === null ? "QUOTING_DISABLED" : "LIVE",
-        reasonCodes: suspended ? ["INFORMATION_SHOCK_REPRICE"] : theo === null ? ["THEO_UNAVAILABLE"] : ["DEMO_ONLY"],
-        provenance: { source: theo === null ? "MARKET_BASELINE" : "BENCHMARK_THEO" },
+        reasonCodes: suspended ? ["INFORMATION_SHOCK_REPRICE"] : theo === null ? ["MARKET_BASELINE_UNAVAILABLE"] : ["TXODDS_MARKET_BASELINE", "MARKET_CONSENSUS", "NOT_PROPRIETARY_THEO", "NOT_PROVEN_ALPHA", "DIRECTIONAL_TRADING_DISABLED", "KELLY_DISABLED"],
+        provenance: { source: "REPLAY", notes: "Sanitized TxODDS-shaped replay market consensus." },
       };
     });
   }
@@ -292,10 +354,9 @@ export class DemoReplayEngine {
       makerQuantity: item.makerQuantity,
       takerQuantity: item.takerQuantity,
       strategyAttribution: {
-        "demo-maker": item.makerQuantity,
-        "demo-directional": item.takerQuantity,
+        "market-baseline-maker-paper": item.makerQuantity,
       },
-      provenance: { source: "SYNTHETIC" },
+      provenance: { source: "REPLAY" },
     }));
   }
 
@@ -338,7 +399,7 @@ export class DemoReplayEngine {
       turnover: this.fills.reduce((sum, fill) => sum + fill.size * fill.price, 0),
       quoteUptime: this.currentIndex === 0 ? 0 : this.audit.filter((item) => item.finalAction !== "QUOTE_SUSPENDED").length / this.currentIndex,
       inventoryVariance: positions.reduce((sum, item) => sum + item.quantity ** 2, 0) / Math.max(1, positions.length),
-      adverseSelectionMarkout: fillCount ? -0.7 : 0,
+      adverseSelectionMarkout: 0,
       makerPnl: positions.filter((item) => item.makerQuantity > 0).reduce((sum, item) => sum + (item.unrealizedPnl ?? 0) + item.realizedPnl, 0),
       takerPnl: positions.filter((item) => item.takerQuantity > 0).reduce((sum, item) => sum + (item.unrealizedPnl ?? 0) + item.realizedPnl, 0),
     };
@@ -347,7 +408,7 @@ export class DemoReplayEngine {
   private toAudit(event: DemoReplayEvent, row: DemoMarketRow): DemoAuditEvent {
     return {
       auditId: `audit-${event.eventId}`,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(event.replayTimeMs).toISOString(),
       replayIndex: event.index,
       marketObservation: `${row.selection} ${formatPct(row.marketProbability)}`,
       theo: row.theoProbability,
@@ -358,14 +419,16 @@ export class DemoReplayEngine {
         base: 0.025,
         uncertainty: (row.uncertainty ?? 0) * 0.55,
         inventory: Math.abs(row.inventoryLean),
+        innovation: Math.abs(row.standardizedInnovation ?? 0) * 0.0015,
+        latency: 0.001,
       },
       inventoryLean: row.inventoryLean,
       directionalLean: row.directionalLean,
-      proposedAction: row.edge !== null && row.edge > 0.025 ? "BUY" : "MAKE_MARKET",
-      riskChecks: ["POSITION_LIMIT_OK", "WORST_CASE_LOSS_OK", "PAPER_ONLY"],
-      finalAction: row.status === "QUOTE_SUSPENDED" ? "QUOTE_SUSPENDED" : event.eventType,
-      fillResult: event.eventType.includes("FILL") ? "FILLED_PAPER" : "NO_FILL",
-      strategyVersion: "demo-loop/0.1.0",
+      proposedAction: "MAKE_MARKET",
+      riskChecks: ["POSITION_LIMIT_OK", "MARKET_LIMIT_OK", "FIXTURE_LIMIT_OK", "WORST_CASE_LOSS_OK", "PAPER_ONLY", "DIRECTIONAL_DISABLED", "KELLY_DISABLED"],
+      finalAction: row.status === "QUOTE_SUSPENDED" ? "QUOTE_SUSPENDED" : this.fills.some((fill) => fill.fillId === `demo-fill-${event.index}`) ? "PAPER_MAKER_FILL" : "PAPER_MAKER_QUOTE",
+      fillResult: this.fills.some((fill) => fill.fillId === `demo-fill-${event.index}`) ? "FILLED_PAPER_FUTURE_CROSS" : "NO_FILL",
+      strategyVersion: "market-baseline-maker/1.0.0",
       reasonCodes: row.reasonCodes,
       provenance: event.provenance,
     };
@@ -397,11 +460,11 @@ export function createDemoMarkets(): MarketDefinition[] {
 
 function createSelectionState(): SelectionState[] {
   return [
-    { marketId: "demo-three-way", market: "Full-time result", selectionId: "home", selection: "Atlas FC", probability: 0.43, theo: null, uncertainty: null, inventory: 0, avgEntry: null, realizedPnl: 0, fees: 0, makerQuantity: 0, takerQuantity: 0 },
-    { marketId: "demo-three-way", market: "Full-time result", selectionId: "draw", selection: "Draw", probability: 0.29, theo: null, uncertainty: null, inventory: 0, avgEntry: null, realizedPnl: 0, fees: 0, makerQuantity: 0, takerQuantity: 0 },
-    { marketId: "demo-three-way", market: "Full-time result", selectionId: "away", selection: "Boreal United", probability: 0.28, theo: null, uncertainty: null, inventory: 0, avgEntry: null, realizedPnl: 0, fees: 0, makerQuantity: 0, takerQuantity: 0 },
-    { marketId: "demo-total-25", market: "Total goals 2.5", selectionId: "over-2-5", selection: "Over 2.5", probability: 0.48, theo: null, uncertainty: null, inventory: 0, avgEntry: null, realizedPnl: 0, fees: 0, makerQuantity: 0, takerQuantity: 0 },
-    { marketId: "demo-total-25", market: "Total goals 2.5", selectionId: "under-2-5", selection: "Under 2.5", probability: 0.52, theo: null, uncertainty: null, inventory: 0, avgEntry: null, realizedPnl: 0, fees: 0, makerQuantity: 0, takerQuantity: 0 },
+    { marketId: "demo-three-way", market: "Full-time result", selectionId: "home", selection: "Atlas FC", probability: 0.43, theo: null, uncertainty: null, innovation: null, standardizedInnovation: null, volatility: 0, inventory: 0, avgEntry: null, realizedPnl: 0, fees: 0, makerQuantity: 0, takerQuantity: 0 },
+    { marketId: "demo-three-way", market: "Full-time result", selectionId: "draw", selection: "Draw", probability: 0.29, theo: null, uncertainty: null, innovation: null, standardizedInnovation: null, volatility: 0, inventory: 0, avgEntry: null, realizedPnl: 0, fees: 0, makerQuantity: 0, takerQuantity: 0 },
+    { marketId: "demo-three-way", market: "Full-time result", selectionId: "away", selection: "Boreal United", probability: 0.28, theo: null, uncertainty: null, innovation: null, standardizedInnovation: null, volatility: 0, inventory: 0, avgEntry: null, realizedPnl: 0, fees: 0, makerQuantity: 0, takerQuantity: 0 },
+    { marketId: "demo-total-25", market: "Total goals 2.5", selectionId: "over-2-5", selection: "Over 2.5", probability: 0.48, theo: null, uncertainty: null, innovation: null, standardizedInnovation: null, volatility: 0, inventory: 0, avgEntry: null, realizedPnl: 0, fees: 0, makerQuantity: 0, takerQuantity: 0 },
+    { marketId: "demo-total-25", market: "Total goals 2.5", selectionId: "under-2-5", selection: "Under 2.5", probability: 0.52, theo: null, uncertainty: null, innovation: null, standardizedInnovation: null, volatility: 0, inventory: 0, avgEntry: null, realizedPnl: 0, fees: 0, makerQuantity: 0, takerQuantity: 0 },
   ];
 }
 
@@ -416,8 +479,8 @@ function createReplayEvents(): DemoReplayEvent[] {
     if (i === 58) { eventType = "GOAL"; description = "Synthetic Atlas FC goal event"; home += 0.13; over += 0.16; }
     if (i === 70) { eventType = "QUOTE_SUSPENSION"; description = "Quotes suspended during large innovation"; home += 0.08; }
     if (i === 79) { eventType = "QUOTE_RESUMPTION"; description = "Controlled quote resumption after repricing"; }
-    if (i === 82) { eventType = "MAKER_FILL"; description = "Paper maker fill after spread normalizes"; }
-    if (i === 90) { eventType = "DIRECTIONAL_FILL"; description = "Paper directional fill from benchmark edge"; }
+    if (i === 82) { description = "Future market observation used by conservative cross-only fill logic"; home -= 0.06; }
+    if (i === 90) { description = "Maker-only market observation; directional trading remains disabled"; }
     if (i === 119) { eventType = "SETTLEMENT"; description = "Synthetic final settlement: Atlas FC wins 2-1"; home = 0.98; over = 0.97; }
     const isTotal = i % 3 === 0;
     const wave = Math.sin(i / 9) * 0.006 + Math.cos(i / 17) * 0.004;

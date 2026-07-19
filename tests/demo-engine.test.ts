@@ -29,17 +29,18 @@ describe("deterministic demo replay", () => {
     engine.injectShock();
     const state = engine.getState();
     expect(state.speed).toBe(20);
-    expect(state.audit.some((event) => event.finalAction === "INFO_SHOCK")).toBe(true);
+    expect(state.audit.some((event) => event.reasonCodes.includes("INFORMATION_SHOCK_REPRICE"))).toBe(true);
   });
 
-  it("creates maker and directional paper fills and complete audit rows", () => {
+  it("creates only future-cross maker fills and complete audit rows", () => {
     const engine = new DemoReplayEngine("replay", true);
     engine.start();
     for (let i = 0; i < 100; i += 1) engine.step();
     const state = engine.getState();
-    expect(state.positions.length).toBeGreaterThan(0);
-    expect(state.positions.some((position) => position.makerQuantity > 0)).toBe(true);
-    expect(state.positions.some((position) => position.takerQuantity > 0)).toBe(true);
+    expect(state.makerFills?.length).toBeGreaterThan(0);
+    expect(state.makerFills?.every((fill) => fill.executionStyle === "MAKER")).toBe(true);
+    expect(state.positions.every((position) => position.takerQuantity === 0)).toBe(true);
+    expect(state.audit.every((event) => event.edge === null && event.directionalLean === 0)).toBe(true);
     expect(state.audit.every((event) => event.riskChecks.includes("PAPER_ONLY"))).toBe(true);
   });
 
@@ -58,10 +59,22 @@ describe("benchmark theo restrictions", () => {
   it("is available only in demo replay or synthetic mode", () => {
     const provider = new BenchmarkStateSpaceTheoProvider();
     const replayTheo = provider.getTheo({ marketId: "m", selectionId: "s", observedProbability: 0.55, previousTheo: null, dataMode: "replay", demoMode: true });
-    expect(replayTheo.status).toBe("AVAILABLE");
-    expect(replayTheo.source).toBe("BENCHMARK_THEO");
+    expect(replayTheo.status).toBe("AVAILABLE_BENCHMARK");
+    expect(replayTheo.source).toBe("REPLAY");
+    expect(replayTheo.independentAlpha).toBe(false);
     const txlineTheo = provider.getTheo({ marketId: "m", selectionId: "s", observedProbability: 0.55, previousTheo: null, dataMode: "txline", demoMode: true });
     expect(txlineTheo.probabilities).toBeNull();
-    expect(txlineTheo.reasonCodes).toContain("APPROVED_RESEARCH_MODEL_NOT_CONNECTED");
+    expect(txlineTheo.reasonCodes).toContain("TXODDS_MARKET_BASELINE_UNAVAILABLE");
+  });
+
+  it("standardizes innovation using predicted plus observation variance", () => {
+    const provider = new BenchmarkStateSpaceTheoProvider();
+    provider.getTheo({ marketId: "m", selectionId: "s", observedProbability: 0.5, previousTheo: null, dataMode: "replay", demoMode: true });
+    provider.getTheo({ marketId: "m", selectionId: "s", observedProbability: 0.55, previousTheo: 0.5, dataMode: "replay", demoMode: true });
+    const diagnostics = provider.getDiagnostics("m", "s")!;
+    expect(diagnostics.standardizedInnovation).toBeCloseTo(
+      diagnostics.innovation / Math.sqrt(diagnostics.predictedVariance + diagnostics.observationVariance),
+      12,
+    );
   });
 });

@@ -30,7 +30,7 @@ describe("demo API", () => {
     const ready = await fetch(`${baseUrl}/ready`).then((res) => res.json());
     expect(ready.ready).toBe(true);
     const state = await fetch(`${baseUrl}/api/demo/state`).then((res) => res.json());
-    expect(state.disclaimer).toContain("Replay");
+    expect(state.disclaimer).toContain("MARKET CONSENSUS BASELINE");
   });
 
   it("handles replay controls", async () => {
@@ -42,5 +42,17 @@ describe("demo API", () => {
     expect(speed.speed).toBe(5);
     const stepped = await post("/api/demo/step");
     expect(stepped.currentIndex).toBeGreaterThan(0);
+  });
+
+  it("exposes truthful pricing, trading, quote, position, risk, performance, and audit status", async () => {
+    const txodds = await fetch(`${baseUrl}/api/txodds/status`).then((res) => res.json());
+    expect(txodds).toMatchObject({ status: "CONNECTED", mode: "replay", readOnly: true });
+    const theo = await fetch(`${baseUrl}/api/theo/status`).then((res) => res.json());
+    expect(theo).toMatchObject({ status: "AVAILABLE_BENCHMARK", provenance: "TXODDS_MARKET_BASELINE", independentAlpha: false });
+    const trading = await fetch(`${baseUrl}/api/trading/status`).then((res) => res.json());
+    expect(trading).toMatchObject({ maker: "PAPER_ENABLED", directional: "DISABLED_NON_INDEPENDENT_THEO", kelly: "DISABLED_NON_INDEPENDENT_THEO", realExecution: "DISABLED", estimatedEdge: null, kellySize: null });
+    for (const path of ["/api/quotes", "/api/positions", "/api/risk", "/api/performance", "/api/audit"]) {
+      expect((await fetch(`${baseUrl}${path}`)).ok).toBe(true);
+    }
   });
 });
