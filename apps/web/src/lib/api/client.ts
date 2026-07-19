@@ -12,17 +12,79 @@ export type SystemHealth = {
 
 export type TradingStatus = {
   maker: string;
-  directional: string;
+  directional?: string;
+  hawk?: string;
   kelly: string;
-  kellyImplemented: boolean;
-  kellyEnabled: boolean;
+  kellyImplemented?: boolean;
+  kellyEnabled?: boolean;
+  agentAutonomous?: boolean;
+  executionMode?: "SHADOW" | string;
+  shadowExecution?: "ENABLED" | string;
+  decisionBookEnabled?: boolean;
+  realExecutionEnabled?: boolean;
   realExecution: string;
-  walletOperations: string;
-  subscriptionActivation: string;
-  directionalAction: "NO_ACTION";
-  kellySize: null;
-  labels: string[];
+  walletOperations?: string;
+  subscriptionActivation?: string;
+  directionalAction?: string;
+  kellySize?: null;
+  labels?: string[];
+  reasonCodes?: string[];
+  sharedRisk?: {
+    displayName?: string;
+    executionMode?: string;
+    grossExposure?: number;
+    remainingCapacity?: number;
+    killSwitches?: { manual?: boolean; latency?: boolean; staleData?: boolean; sequenceGap?: boolean };
+  };
+};
+
+export type AgentStatus = {
+  agentId: "maker" | "hawk";
+  displayName: string;
+  technicalRole: string;
+  technicalSubtitle?: string;
+  state: string;
+  latestAction: string | null;
+  latestDecisionId?: string | null;
+  executionMode: string;
   reasonCodes: string[];
+  bid?: number | null;
+  ask?: number | null;
+  width?: number | null;
+  size?: number | null;
+  inventoryLean?: number;
+  quoteGuardRiskScore?: number | null;
+  signalType?: string;
+  signalConfidence?: number;
+  paperPosition?: number;
+};
+
+export type DecisionRecord = {
+  decisionId: string;
+  decisionTime: string;
+  strategy: string;
+  action: string;
+  side: string;
+  proposedPrice: number | null;
+  proposedSize: number;
+  status: string;
+  realizedPnl: number;
+  unrealizedPnl: number;
+  reasonCodes: string[];
+  noLookaheadVerificationStatus: string;
+  provenance: string;
+};
+
+export type CurrentFixture = {
+  fixture?: {
+    fixtureId?: string;
+    participant1?: string;
+    participant2?: string;
+    startTime?: string | null;
+    gameState?: string | null;
+  };
+  provenance?: string;
+  resultStatus?: string;
 };
 
 async function request<T>(path: string, init?: RequestInit, parse?: (value: unknown) => T): Promise<T> {
@@ -38,6 +100,10 @@ async function request<T>(path: string, init?: RequestInit, parse?: (value: unkn
 export const demoApi = {
   health: () => request<SystemHealth>("/health"),
   tradingStatus: () => request<TradingStatus>("/api/trading/status"),
+  makerStatus: () => request<AgentStatus>("/api/agent/maker"),
+  hawkStatus: () => request<AgentStatus>("/api/agent/hawk"),
+  decisionBook: () => request<{ displayName: string; executionMode: string; decisions: DecisionRecord[] }>("/api/decision-book"),
+  currentFixture: () => request<CurrentFixture>("/api/fixtures/current"),
   state: () => request<DemoState>("/api/demo/state", undefined, (value) => DemoStateSchema.parse(value)),
   start: () => request<DemoState>("/api/demo/start", { method: "POST" }, (value) => DemoStateSchema.parse(value)),
   pause: () => request<DemoState>("/api/demo/pause", { method: "POST" }, (value) => DemoStateSchema.parse(value)),

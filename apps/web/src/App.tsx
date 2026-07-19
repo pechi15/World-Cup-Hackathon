@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, AlertTriangle, BadgeCheck, Pause, Play, RotateCcw, Shield, StepForward, Zap } from "lucide-react";
+import { Activity, BadgeCheck, BookOpen, Bot, Gauge, Pause, Play, Radio, RotateCcw, ShieldCheck, StepForward, WalletCards, Zap } from "lucide-react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { DemoState } from "../../../packages/contracts/src/index.js";
 import { demoApi } from "./lib/api/client.js";
@@ -7,6 +7,7 @@ import { demoApi } from "./lib/api/client.js";
 const fmtPct = (value: number | null | undefined) => value == null ? "Unavailable" : `${(value * 100).toFixed(1)}%`;
 const fmtMoney = (value: number) => `${value >= 0 ? "+" : "-"}$${Math.abs(value).toFixed(2)}`;
 const fmtNum = (value: number | null | undefined) => value == null ? "-" : value.toFixed(3);
+const fmtTime = (value: string | null | undefined) => value ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "Awaiting event";
 
 export function App() {
   const queryClient = useQueryClient();
@@ -18,6 +19,11 @@ export function App() {
   });
   const healthQuery = useQuery({ queryKey: ["system-health"], queryFn: demoApi.health, refetchInterval: 5_000, retry: false });
   const tradingQuery = useQuery({ queryKey: ["trading-status"], queryFn: demoApi.tradingStatus, refetchInterval: 5_000, retry: false });
+  const hiveApiAvailable = tradingQuery.data?.decisionBookEnabled === true;
+  const makerQuery = useQuery({ queryKey: ["maker-agent"], queryFn: demoApi.makerStatus, refetchInterval: 1_000, retry: false, enabled: hiveApiAvailable });
+  const hawkQuery = useQuery({ queryKey: ["hawk-agent"], queryFn: demoApi.hawkStatus, refetchInterval: 1_000, retry: false, enabled: hiveApiAvailable });
+  const decisionQuery = useQuery({ queryKey: ["decision-book"], queryFn: demoApi.decisionBook, refetchInterval: 1_000, retry: false, enabled: hiveApiAvailable });
+  const fixtureQuery = useQuery({ queryKey: ["current-fixture"], queryFn: demoApi.currentFixture, refetchInterval: 30_000, retry: false, enabled: hiveApiAvailable });
   const replaysQuery = useQuery({ queryKey: ["demo-replays"], queryFn: demoApi.replays, retry: 1 });
   const action = (fn: () => Promise<DemoState>) => useMutation({
     mutationFn: fn,
@@ -46,72 +52,113 @@ export function App() {
   const state = stateQuery.data!;
   const backendStatus = healthQuery.isError ? "DISCONNECTED" : healthQuery.data ? "CONNECTED" : "CHECKING";
   const txoddsStatus = healthQuery.data?.dataStatus.status ?? "UNAVAILABLE";
-  const kellyLocked = tradingQuery.data?.kellyEnabled === false;
   const isBusy = start.isPending || pause.isPending || resume.isPending || reset.isPending || step.isPending || shock.isPending || speed.isPending || selectReplay.isPending;
   const makerRow = state.marketRows.find((row) => row.status === "LIVE" && row.bid !== null && row.ask !== null) ?? state.marketRows[0];
   const makerAction = state.audit.at(-1)?.finalAction ?? "WAITING_FOR_MARKET";
-  const makerState = tradingQuery.data?.maker ?? (makerRow?.status === "LIVE" ? "PAPER_ENABLED" : "WAITING");
+  const makerState = makerQuery.data?.state ?? tradingQuery.data?.maker ?? (makerRow?.status === "LIVE" ? "QUOTING" : "WAITING");
+  const hawkState = hawkQuery.data?.state ?? tradingQuery.data?.hawk ?? tradingQuery.data?.directional ?? "MONITORING";
+  const latestDecision = decisionQuery.data?.decisions.at(-1);
+  const latestPosition = state.positions.at(-1);
+  const fixture = fixtureQuery.data?.fixture;
+  const fixtureLabel = fixture?.participant1 && fixture.participant2
+    ? `${fixture.participant1} vs ${fixture.participant2}`
+    : "Spain vs Argentina";
+  const agentRunning = backendStatus === "CONNECTED" && tradingQuery.data?.agentAutonomous !== false ? "RUNNING" : backendStatus;
+  const executionMode = tradingQuery.data?.executionMode ?? makerQuery.data?.executionMode ?? "SHADOW";
+  const txlineConnection = txoddsStatus === "CONNECTED" ? "CONNECTED" : fixtureQuery.data ? "SNAPSHOT READY" : txoddsStatus;
+  const foragerAction = hawkQuery.data?.latestAction ?? tradingQuery.data?.directionalAction ?? "NO_TRADE";
+  const riskHealthy = !state.killSwitch && !Object.values(tradingQuery.data?.sharedRisk?.killSwitches ?? {}).some(Boolean);
 
   return (
     <Shell>
-      <header className="status-bar">
-        <Status icon={<BadgeCheck size={17} />} label="Data mode" value={state.dataMode.toUpperCase()} />
-        <Status icon={<Activity size={17} />} label="Data source" value={state.dataSource} />
-        <Status icon={<Shield size={17} />} label="Backend" value={backendStatus} />
-        <Status icon={<Activity size={17} />} label="TxODDS adapter" value={txoddsStatus} />
-        <Status icon={<Play size={17} />} label={state.dataMode === "replay" ? "Replay" : "Live paper"} value={state.dataMode === "replay" ? `${state.replayStatus} @ ${state.speed}x` : state.strategyStatus} />
-        <Status icon={<Zap size={17} />} label="Pricing" value={state.theoProvider} />
-        <Status icon={<AlertTriangle size={17} />} label="Kill switch" value={state.killSwitch ? "Enabled" : "Off"} />
+      <header className="demo-masthead">
+        <div className="brand-lockup">
+          <div className="hive-mark" aria-hidden="true"><span /><span /><span /></div>
+          <div><p>ORCHID HIVE</p><h1>World Cup agent desk</h1><h2 className="sr-only">World Cup market-consensus market maker</h2></div>
+        </div>
+        <div className="demo-promise"><strong>3-MINUTE LIVE DEMO</strong><span>Market input → autonomous decision → shadow portfolio</span></div>
+        <div className="safety-lockup"><span>PAPER MARKET MAKING</span><span>SHADOW EXECUTION</span><span>REAL FUNDS DISABLED</span></div>
       </header>
 
-      <section className="hero">
-        <div>
-          <p className="eyebrow">PAPER MARKET MAKING · NO REAL EXECUTION</p>
-          <h1>World Cup market-consensus market maker</h1>
-          <p>{state.disclaimer}</p>
-        </div>
+      <section className="judge-strip status-bar" aria-label="Demo status at a glance">
+        <span className="sr-only">{state.replayStatus} @ {state.speed}x</span>
+        <Spotlight icon={<Radio size={18} />} label="LIVE TXLINE INPUT" value={txlineConnection} tone="live" detail={txoddsStatus === "CONNECTED" ? "Authenticated read-only feed" : state.dataSource} />
+        <Spotlight icon={<BadgeCheck size={18} />} label="CURRENT FIXTURE" value={fixtureLabel} detail={fixture?.gameState ?? "PRE-MATCH"} />
+        <Spotlight icon={<Bot size={18} />} label="AUTONOMOUS AGENT" value={agentRunning} tone="live" detail="Decision loop active" />
+        <Spotlight icon={<Activity size={18} />} label="STRATEGY" value="Maker Bee + Forager Bee" detail="Two agents · one risk engine" />
+        <Spotlight icon={<ShieldCheck size={18} />} label="EXECUTION" value={executionMode} tone="safe" detail="No external orders" />
+      </section>
+
+      <section className="agent-grid" aria-label="Agent status">
+        <article className="agent-card maker-agent">
+          <h2 className="sr-only">Maker Agent</h2>
+          <div className="agent-card-heading">
+            <div className="agent-icon maker"><Activity size={18} /></div>
+            <div><p className="agent-kicker">AUTONOMOUS MARKET MAKER · PAPER EXECUTION</p><h2>Maker Bee</h2></div>
+            <span className="agent-state live">{makerState}</span>
+          </div>
+          <p className="agent-fixture">Supplies and manages simulated two-sided liquidity.</p>
+          <dl className="agent-metrics">
+            <div><dt>Latest action</dt><dd>{makerQuery.data?.latestAction ?? makerAction}</dd></div>
+            <div><dt>Bid / Ask</dt><dd>{fmtNum(makerQuery.data?.bid ?? makerRow?.bid)} / {fmtNum(makerQuery.data?.ask ?? makerRow?.ask)}</dd></div>
+            <div><dt>Size</dt><dd>{fmtNum(makerQuery.data?.size ?? makerRow?.bidSize)}</dd></div>
+            <div><dt>Inventory lean</dt><dd>{fmtNum(makerQuery.data?.inventoryLean ?? makerRow?.inventoryLean)}</dd></div>
+          </dl>
+        </article>
+
+        <article className="agent-card forager-agent">
+          <div className="agent-card-heading">
+            <div className="agent-icon forager"><Zap size={18} /></div>
+            <div><p className="agent-kicker">RELATIVE-VALUE SCOUT</p><h2>Forager Bee</h2></div>
+            <span className="agent-state watch">{hawkState}</span>
+          </div>
+          <p className="agent-fixture">Searches for movement and relative-value signals.</p>
+          <dl className="agent-metrics">
+            <div><dt>Action</dt><dd>{foragerAction}</dd></div>
+            <div><dt>Signal</dt><dd>{hawkQuery.data?.signalType ?? "MONITORING"}</dd></div>
+            <div><dt>Paper position</dt><dd>{fmtNum(hawkQuery.data?.paperPosition ?? 0)}</dd></div>
+          </dl>
+        </article>
+
+        <article className="agent-card risk-agent">
+          <div className="agent-card-heading">
+            <div className="agent-icon risk"><ShieldCheck size={18} /></div>
+            <div><p className="agent-kicker">SHARED LIMITS & CONTROLS</p><h2>Hive Risk Engine</h2></div>
+            <span className={`agent-state ${riskHealthy ? "live" : "halt"}`}>{riskHealthy ? "ARMED" : "HALTED"}</span>
+          </div>
+          <p className="agent-fixture">Governs inventory, latency, exposure, drawdown, and kill switches.</p>
+          <dl className="agent-metrics">
+            <div><dt>Risk used</dt><dd>{(state.risk.riskBudgetUtilization * 100).toFixed(1)}%</dd></div>
+            <div><dt>Exposure</dt><dd>{state.risk.fixtureExposure.toFixed(2)}</dd></div>
+            <div><dt>Kill switch</dt><dd>{state.killSwitch ? "ON" : "OFF"}</dd></div>
+          </dl>
+        </article>
+      </section>
+
+      <section className="snapshot-grid" aria-label="Latest decision and portfolio state">
+        <Snapshot icon={<BookOpen size={17} />} label="LATEST DECISION" value={latestDecision?.action ?? makerAction} detail={`${latestDecision?.strategy?.toUpperCase() ?? "MAKER"} · ${fmtTime(latestDecision?.decisionTime ?? state.lastMarketUpdate)}`} badge={latestDecision?.noLookaheadVerificationStatus ?? "NO-LOOKAHEAD"} />
+        <Snapshot icon={<Activity size={17} />} label="LATEST QUOTE" value={`${fmtNum(makerQuery.data?.bid ?? makerRow?.bid)} / ${fmtNum(makerQuery.data?.ask ?? makerRow?.ask)}`} detail={`Bid / Ask · width ${fmtNum(makerQuery.data?.width ?? makerRow?.width)}`} />
+        <Snapshot icon={<WalletCards size={17} />} label="LATEST POSITION" value={latestPosition ? `${latestPosition.quantity.toFixed(2)} PAPER` : "FLAT"} detail={latestPosition?.selectionId ?? "No open paper inventory"} />
+        <Snapshot icon={<Gauge size={17} />} label="P&L" value={fmtMoney(state.performance.netPnl)} detail={`Maker ${fmtMoney(state.performance.makerPnl)} · Fees $${(state.feesPaid ?? 0).toFixed(2)}`} tone={state.performance.netPnl >= 0 ? "positive" : "negative"} />
+        <Snapshot icon={<ShieldCheck size={17} />} label="RISK" value={`${(state.risk.riskBudgetUtilization * 100).toFixed(1)}% USED`} detail={`Worst case ${fmtMoney(state.risk.worstCaseTerminalPnl)}`} tone={riskHealthy ? "positive" : "negative"} />
+      </section>
+
+      <section className="demo-controls" aria-label="Demo controls">
+        <div className="control-context"><span>{state.dataMode === "replay" ? "HISTORICAL REPLAY" : "LIVE INPUT"}</span><strong>{state.dataMode === "replay" ? `${state.replayStatus} · ${state.speed}x` : txoddsStatus}</strong></div>
         {state.dataMode === "replay" ? <div className="controls">
           <label>Replay source
             <select value={replaysQuery.data?.selected ?? "built-in"} onChange={(event) => selectReplay.mutate(event.target.value)} disabled={isBusy}>
               {(replaysQuery.data?.options ?? [{ id: "built-in", label: "Built-in deterministic replay", available: true }]).map((option) => <option key={option.id} value={option.id} disabled={!option.available}>{option.label}{option.available ? "" : " (unavailable)"}</option>)}
             </select>
           </label>
-          <button className="primary" onClick={() => start.mutate()} disabled={isBusy}><Play size={16} /> Run Full Demo</button>
-          <button onClick={() => pause.mutate()} disabled={isBusy || state.replayStatus !== "RUNNING"}><Pause size={16} /> Pause</button>
-          <button onClick={() => resume.mutate()} disabled={isBusy || !["READY", "PAUSED"].includes(state.replayStatus)}><Play size={16} /> Resume</button>
-          <button onClick={() => reset.mutate()} disabled={isBusy}><RotateCcw size={16} /> Reset</button>
-          <button onClick={() => step.mutate()} disabled={isBusy || state.replayStatus === "COMPLETE"}><StepForward size={16} /> Step</button>
-          {[1, 5, 20, 60].map((value) => <button key={value} onClick={() => speed.mutate(value)} disabled={isBusy}>{value}x</button>)}
-          <button onClick={() => shock.mutate()} disabled={isBusy}><Zap size={16} /> Inject information shock</button>
-        </div> : <div className="controls"><span>Live read-only TxODDS feed; replay controls are disabled.</span></div>}
-      </section>
-      <div className="safety-badges">
-        <strong>PAPER MARKET MAKING</strong>
-        <strong>DIRECTIONAL TRADING DISABLED</strong>
-        <strong className={kellyLocked ? "locked" : ""} title={tradingQuery.data?.reasonCodes.join(", ")}>KELLY MODULE: AVAILABLE BUT LOCKED</strong>
-        <span>Requires independently calibrated theo</span>
-        <strong>REAL EXECUTION DISABLED</strong>
-        <strong>WALLET OPERATIONS DISABLED</strong>
-      </div>
-
-      <section className="agent-grid" aria-label="Agent status">
-        <article className="agent-card maker-agent">
-          <div className="agent-card-heading">
-            <div>
-              <p className="agent-kicker">MARKET CONSENSUS · PAPER EXECUTION</p>
-              <h2>Maker Agent</h2>
-            </div>
-            <span className="agent-state">{makerState}</span>
-          </div>
-          <p className="agent-fixture">{makerRow?.fixture ?? "Awaiting fixture data"}</p>
-          <dl className="agent-metrics">
-            <div><dt>Latest action</dt><dd>{makerAction}</dd></div>
-            <div><dt>Bid / Ask</dt><dd>{fmtNum(makerRow?.bid)} / {fmtNum(makerRow?.ask)}</dd></div>
-            <div><dt>Width</dt><dd>{fmtNum(makerRow?.width)}</dd></div>
-            <div><dt>Size</dt><dd>{fmtNum(makerRow?.bidSize)} / {fmtNum(makerRow?.askSize)}</dd></div>
-            <div><dt>Inventory lean</dt><dd>{fmtNum(makerRow?.inventoryLean)}</dd></div>
-          </dl>
-        </article>
+          <button className="primary" onClick={() => start.mutate()} disabled={isBusy}><Play size={15} /> Run Full Demo</button>
+          <button onClick={() => pause.mutate()} disabled={isBusy || state.replayStatus !== "RUNNING"}><Pause size={15} /> Pause</button>
+          <button onClick={() => resume.mutate()} disabled={isBusy || !["READY", "PAUSED"].includes(state.replayStatus)}><Play size={15} /> Resume</button>
+          <button onClick={() => reset.mutate()} disabled={isBusy}><RotateCcw size={15} /> Reset</button>
+          <button onClick={() => step.mutate()} disabled={isBusy || state.replayStatus === "COMPLETE"}><StepForward size={15} /> Step</button>
+          {[1, 5, 20, 60].map((value) => <button className="speed" key={value} onClick={() => speed.mutate(value)} disabled={isBusy}>{value}x</button>)}
+          <button aria-label="Inject information shock" onClick={() => shock.mutate()} disabled={isBusy}><Zap size={15} /> Shock</button>
+        </div> : <p>Live read-only TxLINE feed. Replay controls are disabled.</p>}
       </section>
 
       <main className="grid">
@@ -192,9 +239,14 @@ export function App() {
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="app-shell">{children}<footer>Build {import.meta.env.VITE_APP_VERSION ?? "0.1.0"} | MARKET CONSENSUS BASELINE · NOT PROVEN ALPHA · PAPER ONLY</footer></div>;
+  return <div className="app-shell">{children}<footer>Build {import.meta.env.VITE_APP_VERSION ?? "0.1.0"} · MARKET CONSENSUS BASELINE · SHADOW EXECUTION · NOT PROVEN ALPHA</footer></div>;
 }
-function Status({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) { return <div className="status-item">{icon}<span>{label}</span><strong>{value}</strong></div>; }
+function Spotlight({ icon, label, value, detail, tone = "" }: { icon: React.ReactNode; label: string; value: string; detail: string; tone?: "" | "live" | "safe" }) {
+  return <article className={`spotlight ${tone}`}><div className="spotlight-icon">{icon}</div><div><span>{label}</span><strong>{value}</strong><small>{detail}</small></div></article>;
+}
+function Snapshot({ icon, label, value, detail, badge, tone = "" }: { icon: React.ReactNode; label: string; value: string; detail: string; badge?: string; tone?: "" | "positive" | "negative" }) {
+  return <article className={`snapshot ${tone}`}><div className="snapshot-heading">{icon}<span>{label}</span>{badge && <em>{badge}</em>}</div><strong>{value}</strong><small>{detail}</small></article>;
+}
 function Panel({ title, children, wide = false }: { title: string; children: React.ReactNode; wide?: boolean }) { return <section className={wide ? "panel wide" : "panel"}><h2>{title}</h2>{children}</section>; }
 function Metric({ label, value }: { label: string; value: string }) { return <div className="metric"><span>{label}</span><strong>{value}</strong></div>; }
 function Badge({ label, source }: { label: string; source: string }) { return <span className="badge"><b>{source}</b>{label}</span>; }

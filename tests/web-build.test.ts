@@ -12,5 +12,15 @@ describe("frontend demo source", () => {
     expect(source).toContain("PAPER MARKET MAKING");
     expect(source).toContain("MARKET CONSENSUS BASELINE");
     expect(source).toContain("Maker Fill History");
+    expect(source).toContain("LIVE TXLINE INPUT");
+    expect(source).toContain("CURRENT FIXTURE");
+    expect(source).toContain("AUTONOMOUS AGENT");
+    expect(source).toContain("Maker Bee + Forager Bee");
+    expect(source).toContain("Hive Risk Engine");
+    expect(source).toContain("LATEST DECISION");
+    expect(source).toContain("LATEST QUOTE");
+    expect(source).toContain("LATEST POSITION");
+    expect(source).toContain("SHADOW EXECUTION");
+    expect(source).toContain("REAL FUNDS DISABLED");
   });
 });
