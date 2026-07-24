@@ -1,5 +1,5 @@
 # TxODDS World Cup London Hackathon
-
+[Won 3rd Place for Local Track]
 Project root for the **Trading Tools and Agents** track setup.
 
 ## Layout
