@@ -1,0 +1,25 @@
+{
+  "scenarioId": "world-cup-demo-001",
+  "seed": 20260718,
+  "fixture": {
+    "fixtureId": "demo-final-001",
+    "label": "Atlas FC vs Boreal United",
+    "competition": "World Cup Demo Final",
+    "provenance": "SYNTHETIC"
+  },
+  "markets": [
+    {
+      "marketId": "demo-three-way",
+      "type": "THREE_WAY_MATCH_RESULT",
+      "label": "Full-time result",
+      "selections": ["home", "draw", "away"]
+    },
+    {
+      "marketId": "demo-total-25",
+      "type": "TOTALS",
+      "label": "Total goals 2.5",
+      "selections": ["over-2-5", "under-2-5"]
+    }
+  ],
+  "notes": "Small committed deterministic replay descriptor. Runtime expands this seed into 120 ordered synthetic market events. It is not live or historical performance."
+}
